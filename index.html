@@ -1,9 +1,9 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>Evening Table</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>Counter at 21:40</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: the whole viewport is the "glass", a WebGL window onto a splatted dinner table at night.
+/* Layout: the whole viewport is the "glass", a WebGL window looking down onto a tiled counter at night.
    Type sits lower-left like a placard on the glass; instruments live in the corners. Single dark world by choice. */
 :root{
   --void:#070605;
@@ -95,15 +95,15 @@ body.clean #show:hover{opacity:1}
 @media (prefers-reduced-motion:reduce){.grain{animation:none}}
 </style>
 
-<canvas id="gl" aria-label="A dinner table at night rendered from gaussian splats: a cocktail with ice and lime, a cutting board with tomatoes and basil, a steaming pan and a candle, seen through the screen as if it were a window"></canvas>
+<canvas id="gl" aria-label="A green-tiled kitchen counter at night, seen from above: a cutting board with mint, limes and ginger, raspberries, a jigger of red liqueur, a pink ice tray and two bottles. The screen behaves like glass above the counter."></canvas>
 <div class="vignette"></div>
 <div class="grain"></div>
 <div class="scrim"></div>
-<div id="loader">Setting the table</div>
+<div id="loader">Pouring the counter<br><span id="loadstep">loading photo</span></div>
 
 <div class="ui" id="ui">
   <div class="top">
-    <div><b>21:40</b> / Kitchen table / Window study</div>
+    <div><b>21:40</b> / The counter / Window study</div>
     <div class="stats" aria-live="polite">
       <span><i class="dot" id="mdot"></i>Mode <b id="mode">auto</b></span>
       <span>Splats <b id="count">0</b></span>
@@ -114,11 +114,10 @@ body.clean #show:hover{opacity:1}
 
   <div class="bottom">
     <div class="placard">
-      <h1 id="word">Evening</h1>
-      <p class="lede">Dinner's on the stove and the drink is poured. Every grain of this table is a gaussian splat, and your screen is the glass in front of it. Turn on head tracking, then <em>lean around and tilt your head</em>.</p>
+      <h1 id="word">Muddle</h1>
+      <p class="lede">Mint, lime, raspberries and something red, half-made at 21:40. One photograph, lifted into depth by AI and rebuilt from a million gaussian splats; your screen is the glass above the counter. Turn on head tracking, then <em>lean in and look around</em>.</p>
       <div class="row">
         <button class="primary" id="track">Turn on head tracking</button>
-        <button id="sound" aria-pressed="false">Sound off</button>
         <button id="hide">Hide UI <span class="kbd">H</span></button>
       </div>
     </div>
@@ -132,11 +131,11 @@ body.clean #show:hover{opacity:1}
       <div class="tools">
         <h2>Window</h2>
         <label class="slider" for="gain">Parallax <input id="gain" type="range" min="0.6" max="2.6" step="0.05" value="1.4"><output id="gainv">1.40</output></label>
-        <label class="slider" for="tiltg">Tilt <input id="tiltg" type="range" min="0" max="2" step="0.05" value="1"><output id="tiltv">1.00</output></label>
+        <label class="slider" for="depth">Depth <input id="depth" type="range" min="0.3" max="2" step="0.05" value="1"><output id="depthv">1.00</output></label>
+        <label class="slider" for="tiltg">Tilt <input id="tiltg" type="range" min="0" max="2" step="0.05" value="0.2"><output id="tiltv">0.20</output></label>
         <div class="row">
           <button id="recenter">Recenter</button>
           <label class="btn" for="file">Load .ply / .splat<input id="file" type="file" accept=".ply,.splat"></label>
-          <button id="sample">Sample capture</button>
         </div>
         <div id="captureTools" hidden>
           <div style="display:flex;flex-direction:column;gap:10px">
@@ -145,7 +144,7 @@ body.clean #show:hover{opacity:1}
               <button id="flip">Flip</button>
               <button id="turn">Turn 90°</button>
               <button id="tilt">Tilt 90°</button>
-              <button id="back">Back to the table</button>
+              <button id="back">Back to the counter</button>
             </div>
             <label class="slider" for="dist">Distance <input id="dist" type="range" min="0.6" max="3" step="0.05" value="1"><output id="distv">1.00</output></label>
           </div>
@@ -186,7 +185,7 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 /* =========================================================================
    1. Splat buffer. 14 floats per splat:
       0-2 position | 3-8 covariance xx xy xz yy yz zz | 9-12 rgba | 13 flag
-      flag 0..1 = share of light from the candle (flickers), 2..3 = drifting dust, 3..4 = rising steam
+      flag: reserved for animated effects (0 = static)
    ========================================================================= */
 const STRIDE = 14;
 class Splats {
@@ -216,370 +215,66 @@ function randAxes(){
 }
 
 /* =========================================================================
-   2. The table. Units: the screen is 2 wide, centred at the origin in the
-      z = 0 plane; the eye rests at z = 3.6. Table top at y = -0.75.
-      Splat spacing grows with distance from the eye, so every splat covers
-      roughly the same few pixels: detail where you can see it, nothing wasted.
+   2. The counter, from one photograph.
+      assets/photo.jpg   the image itself
+      assets/height.png  per-pixel height above the tiles (R = high byte, G = low byte, in 1/16 px)
+                         and B = object mask (soft edge); made offline with Depth Anything V2 Large
+      assets/table.jpg   the tiles with the objects removed (soft contact-shadow fill underneath),
+                         extended past the photo's edges for when you lean
+   Units: the screen is 2 wide, centred at the origin in the z = 0 plane; the eye rests at z = 3.6.
+   The tiles sit ZT behind the glass. Every object pixel becomes a splat placed along the ray the
+   camera saw it on, so from the resting position the photo is reproduced exactly, and moving
+   your head reveals real depth.
    ========================================================================= */
-const EYE_Z = 3.6, TY = -0.75;
-const SHIFT_Z = 0.7;   // the whole set is built here, then slid toward the glass by this much
-// DENS_K is set at boot from the screen's real width so splats land ~4 device pixels apart:
-// fine enough that edges and wood grain stay crisp at native resolution.
-let DENS_K = 0.0016;
-const sp = (x, y, z, k) => Math.max(0.0012, Math.hypot(x, y - 0.45, z + SHIFT_Z - EYE_Z) * DENS_K / (k || 1));
-const LIGHTS = [
-  { p: [0.15, 0.56, -3.1],  c: [1.0, 0.74, 0.46], k: 2.5, fo: 0.5 },            // pendant over the table
-  { p: [-1.55, -0.38, -3.95], c: [1.0, 0.56, 0.24], k: 0.55, fo: 4.0, flick: 1 }, // candle
-  { p: [3.2, 1.6, -8.0],    c: [0.42, 0.56, 1.0], k: 2.2, fo: 0.045 },          // cool rim from the window
-  { p: [-3.0, 1.4, -8.6],   c: [1.0, 0.66, 0.4], k: 0.7, fo: 0.25 }             // warm wash on the back wall
-];
-let AR = 0, AG = 0, AB = 0, SPEC = 0, SHIN = 30, EM = 0;   // material out of the albedo functions (EM: reflected-studio glow)
-let OR = 0, OG = 0, OB = 0, OF = 0, OS = 0;          // shaded colour, candle share, specular amount
-function mat(r, g, b, spec, shin, em){ AR = r; AG = g; AB = b; SPEC = spec || 0; SHIN = shin || 30; EM = em || 0; }
+const EYE_Z = 3.6, ZT = 1.0, PHOTO_PAD = 600;
+let photoGeo = null;   // world-space size of the photo + table, for the background quad
 
-function shade(px, py, pz, nx, ny, nz, occ){
-  const amb = 0.06 * occ;
-  let lr = amb * 0.8, lg = amb * 0.9, lb = amb * 1.2, sr = 0, sg = 0, sb = 0, cand = 0;
-  let vx = -px, vy = 0.45 - py, vz = EYE_Z - SHIFT_Z - pz; const vl = Math.hypot(vx, vy, vz); vx /= vl; vy /= vl; vz /= vl;
-  const hasN = !(nx === 0 && ny === 0 && nz === 0);
-  for (let i = 0; i < LIGHTS.length; i++){
-    const L = LIGHTS[i];
-    let lx = L.p[0] - px, ly = L.p[1] - py, lz = L.p[2] - pz;
-    const d2 = lx * lx + ly * ly + lz * lz, id = 1 / Math.sqrt(d2 + 1e-6); lx *= id; ly *= id; lz *= id;
-    const ndl = hasN ? lx * nx + ly * ny + lz * nz : 0.7;
-    const fall = L.k / (1 + d2 * L.fo);
-    const att = fall * Math.max(0, (ndl + 0.12) / 1.12) * (0.55 + 0.45 * occ);
-    lr += att * L.c[0]; lg += att * L.c[1]; lb += att * L.c[2];
-    if (L.flick) cand += att * 0.7;
-    if (SPEC > 0 && hasN && ndl > 0){
-      const hx = lx + vx, hy = ly + vy, hz = lz + vz, hl = Math.hypot(hx, hy, hz);
-      const s = SPEC * Math.pow(Math.max(0, (hx * nx + hy * ny + hz * nz) / hl), SHIN) * fall * 1.6;
-      sr += s * L.c[0]; sg += s * L.c[1]; sb += s * L.c[2]; if (L.flick) cand += s * 0.7;
-    }
-  }
-  const tot = (lr + lg + lb) / 3 + (sr + sg + sb) / 3 + 1e-6;
-  OF = clamp(cand / tot, 0, 1);
-  OS = (sr + sg + sb) / 3 + EM;
-  OR = 1 - Math.exp(-(AR * lr + sr + EM * 1.0) * 1.7) + 0.006;
-  OG = 1 - Math.exp(-(AG * lg + sg + EM * 0.8) * 1.7) + 0.006;
-  OB = 1 - Math.exp(-(AB * lb + sb + EM * 0.62) * 1.7) + 0.01;
+async function loadImage(url){
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Couldn't load ${url} (${res.status})`);
+  return createImageBitmap(await res.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
 }
-function emit(r, g, b, f){ OR = r; OG = g; OB = b; OF = f || 0; OS = 0; }
-
-// ---- primitives -------------------------------------------------------------
-// flat rectangle (origin + two edges), sampled with distance-aware spacing
-function addRect(S, ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, alb, opt = {}){
-  const L1 = Math.hypot(e1x, e1y, e1z), L2 = Math.hypot(e2x, e2y, e2z);
-  const t1x = e1x / L1, t1y = e1y / L1, t1z = e1z / L1, t2x = e2x / L2, t2y = e2y / L2, t2z = e2z / L2;
-  const dens = opt.dens || 1, alpha = opt.alpha || 0.97, blur = opt.blur || 1;
-  let u = 0;
-  while (u < L1){
-    const s = sp(ox + t1x * u + t2x * L2 * 0.5, oy + t1y * u + t2y * L2 * 0.5, oz + t1z * u + t2z * L2 * 0.5, dens) * blur;
-    for (let v = s * 0.5 * rnd(); v < L2; v += s){
-      const uu = clamp(u + (rnd() - 0.5) * s * 0.8, 0, L1), vv = clamp(v + (rnd() - 0.5) * s * 0.8, 0, L2);   // jitter stays inside the face: clean edges
-      const px = ox + t1x * uu + t2x * vv, py = oy + t1y * uu + t2y * vv, pz = oz + t1z * uu + t2z * vv;
-      if (opt.skip && opt.skip(px, py, pz)) continue;
-      SPEC = 0; alb(px, py, pz, uu, vv);
-      if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, opt.occ ? opt.occ(px, py, pz) : 1);
-      const th = rnd() * Math.PI, c = Math.cos(th), sn = Math.sin(th);
-      S.add(px, py, pz, c * t1x + sn * t2x, c * t1y + sn * t2y, c * t1z + sn * t2z, 0.62 * s * (0.85 + 0.3 * rnd()),
-        -sn * t1x + c * t2x, -sn * t1y + c * t2y, -sn * t1z + c * t2z, 0.62 * s * (0.65 + 0.3 * rnd()),
-        nx, ny, nz, 0.06 * s, OR, OG, OB, alpha, OF);
-    }
-    u += s;
-  }
+function pixelsOf(bmp){
+  const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+  const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(bmp, 0, 0);
+  return g.getImageData(0, 0, bmp.width, bmp.height).data;
 }
-// surface of revolution around a vertical axis: prof = [[radius, height], ...] going up/inward
-function addLathe(S, cx, cy, cz, prof, alb, opt = {}){
-  const dens = opt.dens || 1.25, flipN = opt.inside ? -1 : 1, sy = opt.sy || 1;
-  for (let i = 0; i < prof.length - 1; i++){
-    const r0 = prof[i][0], y0 = prof[i][1] * sy, r1 = prof[i + 1][0], y1 = prof[i + 1][1] * sy;
-    const dr = r1 - r0, dy = y1 - y0, len = Math.hypot(dr, dy); if (len < 1e-6) continue;
-    const tr = dr / len, ty = dy / len, nr = ty * flipN, ny = -tr * flipN;
-    let t = 0;
-    while (t < len){
-      const r = r0 + tr * t, y = y0 + ty * t;
-      const s = sp(cx, cy + y, cz + r, dens);
-      const nA = Math.max(5, Math.ceil(TAU * r / s)), ph = rnd() * TAU;
-      for (let k = 0; k < nA; k++){
-        const ang = ph + (k + rnd() * 0.5) / nA * TAU, ca = Math.cos(ang), sa = Math.sin(ang);
-        const px = cx + ca * r, py = cy + y, pz = cz + sa * r;
-        const nx = ca * nr, nz = sa * nr;
-        SPEC = 0; alb(px, py, pz, ang, y, r, i);
-        if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, 1);
-        let a = opt.alpha || 0.97; if (opt.specAlpha) a = clamp(a + OS * opt.specAlpha, 0, 0.95);
-        const around = Math.max(0.6 * TAU * r / nA, 0.0015);
-        S.add(px, py, pz, -sa, 0, ca, around, ca * tr, ty, sa * tr, 0.58 * s, nx, ny, nz, 0.05 * s, OR, OG, OB, a, OF);
-      }
-      t += s;
+
+function buildPhoto(photoBmp, heightBmp){
+  const W = photoBmp.width, H = photoBmp.height;
+  const col = pixelsOf(photoBmp), hd = pixelsOf(heightBmp);
+  // cover the window at the resting eye position, whatever the screen's shape
+  const aspect = innerWidth / innerHeight, visW = 2 * (EYE_Z + ZT) / EYE_Z, visH = visW / aspect;
+  const s = Math.max(visW / W, visH / H) * 1.1;               // world units per photo pixel on the tiles; 10% overscan so ordinary leaning stays inside the photo
+  photoGeo = { s, W, H };
+  const hp = new Float32Array(W * H), al = new Float32Array(W * H);
+  let n = 0;
+  for (let k = 0; k < W * H; k++){
+    const o = k * 4; hp[k] = ((hd[o] << 8) | hd[o + 1]) / 16; al[k] = hd[o + 2] / 255;
+    if (al[k] > 0.02) n++;
+  }
+  const S = new Splats(n);
+  const SIG = 0.55, slopeMax = 2.5;
+  for (let j = 0; j < H; j++){
+    for (let i = 0; i < W; i++){
+      const k = j * W + i, bd = Math.min(i, W - 1 - i, j, H - 1 - j), ef = Math.min(1, bd / 40);
+      const a = al[k] * ef * ef * (3 - 2 * ef);              // objects dissolve into the dark at the photo's very edge
+      if (a <= 0.02) continue;
+      const hz = hp[k] * s, z = -ZT + hz;
+      const f = (EYE_Z - z) / (EYE_Z + ZT);                      // shrink toward the eye: same apparent size as in the photo
+      const ps = s * f;
+      const x = (i - W / 2 + 0.5) * ps, y = -(j - H / 2 + 0.5) * ps;
+      // surface tangents from the height field, so steep sides (glass walls, bottle shoulders) stay closed
+      const dx = clamp((hp[j * W + Math.min(W - 1, i + 1)] - hp[j * W + Math.max(0, i - 1)]) * 0.5, -slopeMax, slopeMax);
+      const dy = clamp((hp[Math.min(H - 1, j + 1) * W + i] - hp[Math.max(0, j - 1) * W + i]) * 0.5, -slopeMax, slopeMax);
+      const t1x = ps, t1z = dx * s, t2y = -ps, t2z = dy * s;
+      const nx = -t1z * t2y, ny = -t1x * t2z, nz = t1x * t2y;   // t1 × t2 (sign doesn't matter for a covariance)
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      const o = k * 4;
+      S.add(x, y, z, t1x, 0, t1z, SIG, 0, t2y, t2z, SIG, nx / nl, ny / nl, nz / nl, 0.12 * ps,
+        col[o] / 255, col[o + 1] / 255, col[o + 2] / 255, a, 0);
     }
   }
-}
-// straight cylinder between two points
-function addCyl(S, ax, ay, az, bx, by, bz, r, alb, opt = {}){
-  let dx = bx - ax, dy = by - ay, dz = bz - az; const L = Math.hypot(dx, dy, dz); dx /= L; dy /= L; dz /= L;
-  let upx = 0, upy = 1, upz = 0; if (Math.abs(dy) > 0.9){ upx = 1; upy = 0; }
-  let ux = dy * upz - dz * upy, uy = dz * upx - dx * upz, uz = dx * upy - dy * upx; const ul = Math.hypot(ux, uy, uz); ux /= ul; uy /= ul; uz /= ul;
-  const vx = dy * uz - dz * uy, vy = dz * ux - dx * uz, vz = dx * uy - dy * ux;
-  let t = 0;
-  while (t < L){
-    const s = sp(ax + dx * t, ay + dy * t, az + dz * t, opt.dens || 1.4), nA = Math.max(5, Math.ceil(TAU * r / s));
-    for (let k = 0; k < nA; k++){
-      const ang = (k + rnd() * 0.6) / nA * TAU, c = Math.cos(ang), sn = Math.sin(ang);
-      const nx = c * ux + sn * vx, ny = c * uy + sn * vy, nz = c * uz + sn * vz;
-      const px = ax + dx * t + nx * r, py = ay + dy * t + ny * r, pz = az + dz * t + nz * r;
-      SPEC = 0; alb(px, py, pz, ang, t);
-      if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, 1);
-      S.add(px, py, pz, dx, dy, dz, 0.7 * s, -sn * ux + c * vx, -sn * uy + c * vy, -sn * uz + c * vz, Math.max(0.0012, 0.75 * TAU * r / nA), nx, ny, nz, 0.04 * s, OR, OG, OB, opt.alpha || 0.97, OF);
-    }
-    t += s;
-  }
-}
-// oriented box: centre, axes A (length), B (width), C (up), half sizes
-function addOBox(S, c, A, B, C, ha, hb, hc, faces, alb, opt = {}){
-  const P = (ka, kb, kc) => [c[0] + A[0] * ka + B[0] * kb + C[0] * kc, c[1] + A[1] * ka + B[1] * kb + C[1] * kc, c[2] + A[2] * ka + B[2] * kb + C[2] * kc];
-  const sc = (v, k) => [v[0] * k, v[1] * k, v[2] * k];
-  const face = (o, e1, e2, n) => addRect(S, o[0], o[1], o[2], e1[0], e1[1], e1[2], e2[0], e2[1], e2[2], n[0], n[1], n[2], alb, opt);
-  if (faces.includes("+C")) face(P(-ha, -hb, hc), sc(A, 2 * ha), sc(B, 2 * hb), C);
-  if (faces.includes("+B")) face(P(-ha, hb, -hc), sc(A, 2 * ha), sc(C, 2 * hc), B);
-  if (faces.includes("-B")) face(P(-ha, -hb, -hc), sc(A, 2 * ha), sc(C, 2 * hc), sc(B, -1));
-  if (faces.includes("+A")) face(P(ha, -hb, -hc), sc(B, 2 * hb), sc(C, 2 * hc), A);
-  if (faces.includes("-A")) face(P(-ha, -hb, -hc), sc(B, 2 * hb), sc(C, 2 * hc), sc(A, -1));
-}
-const yawAxes = (a) => [[Math.cos(a), 0, Math.sin(a)], [-Math.sin(a), 0, Math.cos(a)], [0, 1, 0]];
-const hemiUp = (R, n = 7) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI / 2; p.push([R * Math.sin(t), R * (1 - Math.cos(t))]); } p.push([0, R]); return p; };
-const dome = (R, n = 7) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI / 2; p.push([R * Math.cos(t), R * Math.sin(t)]); } return p; };
-const sphere = (R, n = 12) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI; p.push([R * Math.sin(t), R * (1 - Math.cos(t))]); } return p; };
-
-// ---- materials ----------------------------------------------------------------
-function walnut(x, y, z){
-  const pz = (z + 10) / 0.44, plank = Math.floor(pz), fr = pz - plank;
-  const warp = fbm(x * 0.7 + plank * 3.1, plank * 1.7, 3) * 7;
-  const g = vnoise(x * 1.1 + plank * 17.3, fr * 26 + warp), fine = vnoise(x * 9 + plank * 5, fr * 120);
-  const tone = 0.82 + (h2(plank, 3.7) - 0.5) * 0.3;
-  let r = 0.26 * tone * (0.72 + 0.5 * g + 0.08 * fine), gg = 0.15 * tone * (0.72 + 0.5 * g + 0.08 * fine), b = 0.085 * tone * (0.7 + 0.45 * g);
-  if (fr < 0.012 || fr > 0.988){ r *= 0.25; gg *= 0.25; b *= 0.25; }
-  const ring = fbm(x * 0.5 + 4, z * 0.5, 3); if (ring > 0.62){ const k = (ring - 0.62) * 1.4; r *= 1 - k; gg *= 1 - k; b *= 1 - k; } // old water rings
-  mat(r, gg, b, 0.22, 26);
-}
-function oak(x, y, z){
-  const g = vnoise(x * 2.2, z * 70 + fbm(x * 1.4, z * 3, 3) * 5), k = vnoise(x * 40, z * 4);
-  let r = 0.62 * (0.82 + 0.25 * g), gg = 0.45 * (0.82 + 0.25 * g), b = 0.28 * (0.8 + 0.2 * g);
-  if (k > 0.86 && vnoise(x * 3 + 1, z * 3) > 0.5){ r *= 0.82; gg *= 0.82; b *= 0.82; }                // knife marks
-  mat(r, gg, b, 0.05, 12);
-}
-// polished metal/glass: bright vertical streaks where the lamp and room would reflect (like a studio strip)
-const streak = (ang) => { let ph = ang - Math.PI / 2; ph = Math.atan2(Math.sin(ph), Math.cos(ph));
-  const g = (c, w) => { const k = (ph - c) / w; return Math.exp(-k * k); };
-  return g(0.55, 0.13) + 0.45 * g(-0.95, 0.16) + 0.15 * g(-0.2, 0.5); };
-const steel = (v) => (x, y, z, ang, h) => mat(v * 0.45, v * 0.47, v * 0.5, 1.2, 70, streak(ang) * 0.9);
-const blackMetal = () => mat(0.035, 0.035, 0.04, 0.45, 22);
-
-// ---- the scene -----------------------------------------------------------------
-function buildTable(){
-  rnd = mulberry32(2140);
-  const S = new Splats(1 << 18);
-
-  // table top + front edge
-  addRect(S, -3.4, TY, -0.75, 0, 0, -5.75, 6.8, 0, 0, 0, 1, 0, walnut, { dens: 1 });
-  addRect(S, -3.4, TY - 0.08, -0.75, 6.8, 0, 0, 0, 0.08, 0, 0, 0, 1, (x, y, z) => { walnut(x, y, z); AR *= 0.7; AG *= 0.7; AB *= 0.7; }, { dens: 1 });
-
-  // back wall, deliberately soft (baked depth of field)
-  const winSkip = (x, y, z) => x > 2.4 && x < 5.6 && y > -0.75 && y < 1.8;
-  addRect(S, -7.5, -1.3, -9.6, 15, 0, 0, 0, 5.2, 0, 0, 0, 1, (x, y, z) => {
-    const n = fbm(x * 0.6, y * 0.6, 3); mat(0.24 + n * 0.06, 0.19 + n * 0.05, 0.15 + n * 0.04);
-  }, { blur: 3.2, skip: winSkip, alpha: 1 });
-  // night window: blurred city
-  addRect(S, 2.4, -0.75, -9.65, 3.2, 0, 0, 0, 2.55, 0, 0, 0, 1, (x, y, z) => {
-    const t = (y + 0.75) / 2.55; mat(0.035 + 0.03 * t, 0.05 + 0.035 * t, 0.1 + 0.07 * t);
-  }, { emissive: true, blur: 3.5, alpha: 1 });
-  for (let i = 0; i < 150; i++){
-    const x = mix(2.5, 5.5, rnd()), y = mix(-0.7, 0.6, Math.pow(rnd(), 1.6)), k = rnd();
-    const col = k < 0.55 ? [1, 0.62, 0.25] : k < 0.8 ? [1, 0.92, 0.8] : [0.5, 0.75, 1];
-    const s = 0.03 + rnd() * 0.07;
-    S.iso(x, y, -9.55, s, col[0], col[1], col[2], 0.18 + rnd() * 0.35, 0);
-  }
-  addRect(S, 3.97, -0.75, -9.6, 0.06, 0, 0, 0, 2.55, 0, 0, 0, 1, () => mat(0.02, 0.018, 0.016), { emissive: true, blur: 2.5, alpha: 1 });
-  addRect(S, 2.4, 0.5, -9.6, 3.2, 0, 0, 0, 0.06, 0, 0, 0, 1, () => mat(0.02, 0.018, 0.016), { emissive: true, blur: 2.5, alpha: 1 });
-  // string lights across the wall: out-of-focus bokeh
-  for (const [y0, sag, x0, x1] of [[0.85, 0.4, -7, 2.2], [0.45, 0.3, -6, 1.6]]){
-    for (let x = x0; x < x1; x += 0.36 + rnd() * 0.08){
-      const t = (x - x0) / (x1 - x0), y = y0 - sag * 4 * t * (1 - t);
-      const s = 0.07 + rnd() * 0.03, b = 0.75 + rnd() * 0.25;
-      S.iso(x, y, -9.45, s, b, 0.68 * b, 0.36 * b, 0.42, 0);
-      S.iso(x, y, -9.45, s * 2.6, 1, 0.6, 0.3, 0.05, 0);
-    }
-  }
-
-  // pendant lamp over the table (shade cut off by the top of the window)
-  const lampX = 0.15, lampZ = -3.1, lampY = 0.6;
-  addLathe(S, lampX, lampY, lampZ, [[0.34, 0], [0.32, 0.05], [0.24, 0.15], [0.1, 0.24], [0.035, 0.27]], blackMetal, { dens: 1.1 });
-  addLathe(S, lampX, lampY + 0.004, lampZ, [[0.325, 0], [0.305, 0.05], [0.23, 0.15], [0.09, 0.24]], (x, y) => { const k = 1 - y * 2.2; mat(1.0 * k + 0.1, 0.72 * k + 0.06, 0.38 * k + 0.03); }, { emissive: true, inside: true, dens: 1.1 });
-  addCyl(S, lampX, lampY + 0.27, lampZ, lampX, 3.5, lampZ, 0.006, () => mat(0.02, 0.02, 0.02), { emissive: true });
-  for (let i = 0; i < 260; i++){ const a = rnd() * TAU, r = 0.05 * Math.sqrt(rnd()); S.iso(lampX + Math.cos(a) * r, lampY + 0.07 + rnd() * 0.04, lampZ + Math.sin(a) * r, 0.012, 1, 0.92, 0.75, 0.9, 0); }
-  S.iso(lampX, lampY + 0.06, lampZ, 0.13, 1, 0.75, 0.45, 0.32, 0);
-  S.iso(lampX, lampY + 0.02, lampZ, 0.4, 1, 0.7, 0.4, 0.06, 0);
-
-  // ---- cutting board, top-left
-  const bx0 = -1.45, bx1 = -0.1, bz0 = -3.0, bz1 = -2.22, bt = 0.05, BY = TY + bt;
-  addRect(S, bx0, BY, bz1, 0, 0, bz0 - bz1, bx1 - bx0, 0, 0, 0, 1, 0, oak, { dens: 1.3 });
-  addRect(S, bx0, TY, bz1, bx1 - bx0, 0, 0, 0, bt, 0, 0, 0, 1, (x, y, z) => { const g = vnoise(x * 3, y * 90); mat(0.5 + g * 0.06, 0.36 + g * 0.04, 0.22 + g * 0.03, 0.05, 12, 0.04); }, { dens: 1.5 });
-  addRect(S, bx1, TY, bz1, 0, 0, bz0 - bz1, 0, bt, 0, 1, 0, 0, (x, y, z) => { oak(x, y, z); AR *= 0.75; AG *= 0.75; AB *= 0.75; }, { dens: 1.5 });
-  addRect(S, bx0, TY, bz0, 0, 0, bz1 - bz0, 0, bt, 0, -1, 0, 0, oak, { dens: 1.5 });
-
-  // tomatoes: two halves cut face up and one whole
-  const tomatoCut = (seed) => (x, y, z, ang, h, r, seg) => {
-    if (seg === 7){
-      const R = 0.075, rr = r / R;
-      if (rr > 0.9) return mat(0.75, 0.1, 0.06, 0.3, 30);
-      if (rr < 0.26) return mat(0.95, 0.5, 0.38, 0.4, 40);
-      const septa = Math.abs(Math.sin(ang * 1.5 + seed));
-      if (septa < 0.16) return mat(0.85, 0.2, 0.12, 0.4, 40);
-      const seedDot = h2(Math.floor(x * 400), Math.floor(z * 400)) > 0.86;
-      return seedDot ? mat(0.95, 0.85, 0.45, 0.6, 50) : mat(0.95, 0.5, 0.18, 0.7, 60);
-    }
-    mat(0.72, 0.07, 0.04, 0.8, 55);
-  };
-  addLathe(S, -1.08, BY, -2.5, hemiUp(0.075, 7), tomatoCut(0.4), { dens: 2 });
-  addLathe(S, -0.88, BY, -2.78, hemiUp(0.075, 7), tomatoCut(1.9), { dens: 2 });
-  addLathe(S, -1.3, BY, -2.82, sphere(0.085, 12), () => mat(0.68, 0.06, 0.035, 0.85, 55), { dens: 2, sy: 0.86 });
-  for (let i = 0; i < 6; i++){ const a = i / 6 * TAU + 0.3; S.add(-1.3 + Math.cos(a) * 0.025, BY + 0.148, -2.82 + Math.sin(a) * 0.025, Math.cos(a), 0.15, Math.sin(a), 0.022, -Math.sin(a), 0, Math.cos(a), 0.007, 0, 1, 0, 0.003, 0.12, 0.3, 0.08, 0.95, 0); }
-
-  // basil leaves
-  const leaf = (cx, cy, cz, yaw, len, wid) => {
-    const A = [Math.cos(yaw), 0, Math.sin(yaw)], B = [-Math.sin(yaw), 0, Math.cos(yaw)];
-    for (let u = 0; u <= 1; u += 0.03){
-      const w = wid * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.05)), 0.75);
-      for (let v = -1; v <= 1; v += 0.12){
-        const px = cx + A[0] * (u - 0.5) * len + B[0] * v * w, pz = cz + A[2] * (u - 0.5) * len + B[2] * v * w;
-        const py = cy + 0.004 + v * v * w * 0.35;
-        const vein = Math.abs(v) < 0.1 || Math.abs(Math.sin((u * 7 - Math.abs(v) * 1.5) * Math.PI)) < 0.12;
-        mat(vein ? 0.2 : 0.07, vein ? 0.42 : 0.3, vein ? 0.12 : 0.06, 0.5, 30); shade(px, py, pz, B[0] * -v * 0.4, 1, B[2] * -v * 0.4, 1);
-        S.add(px, py, pz, A[0], 0, A[2], len * 0.022, B[0], 0, B[2], Math.max(0.004, w * 0.09), 0, 1, 0, 0.001, OR, OG, OB, 0.97, OF);
-      }
-    }
-  };
-  leaf(-0.62, BY, -2.4, 0.4, 0.15, 0.045); leaf(-0.48, BY, -2.5, -0.6, 0.13, 0.04); leaf(-1.25, BY, -2.4, 2.4, 0.12, 0.036); leaf(-0.35, TY, -1.95, 1.2, 0.13, 0.04);
-  // chopped scallion
-  for (let i = 0; i < 160; i++){
-    const a = rnd() * TAU, r = 0.09 * Math.sqrt(rnd()), x = -0.45 + Math.cos(a) * r * 1.4, z = -2.72 + Math.sin(a) * r, ax = randAxes();
-    const pale = rnd() < 0.3; mat(pale ? 0.65 : 0.22, pale ? 0.72 : 0.5, pale ? 0.45 : 0.12, 0.5, 30); shade(x, BY + 0.006, z, 0, 1, 0, 1);
-    S.add(x, BY + 0.006, z, ax[0], ax[1], ax[2], 0.009, ax[3], ax[4], ax[5], 0.008, ax[6], ax[7], ax[8], 0.003, OR, OG, OB, 0.97, OF);
-  }
-  // chef's knife
-  { const [A, B, C] = yawAxes(-0.32), cB = [-0.72, BY + 0.004, -2.66];
-    addOBox(S, cB, A, B, C, 0.19, 0.032, 0.002, "+C +B -B", (x, y, z) => { const edge = vnoise(x * 30, z * 30); mat(0.62 + edge * 0.1, 0.64 + edge * 0.1, 0.68 + edge * 0.1, 1.3, 70); }, { dens: 2.2 });
-    const hc = [cB[0] - A[0] * 0.29, BY + 0.012, cB[2] - A[2] * 0.29];
-    addOBox(S, hc, A, B, C, 0.1, 0.017, 0.011, "+C +B -B -A", (x, y, z) => mat(0.07, 0.045, 0.03, 0.4, 30), { dens: 2.2 });
-    for (const k of [-0.05, 0.03]) S.iso(hc[0] + A[0] * k, BY + 0.024, hc[2] + A[2] * k, 0.004, 0.85, 0.82, 0.75, 0.95, 0);
-  }
-
-  // ---- the drink (hero): rocks glass on a linen napkin, ice, lime wheel
-  const gx = 0.12, gz = -2.12;
-  { const [A, B, C] = yawAxes(0.18);
-    addOBox(S, [gx, TY + 0.002, gz], A, B, C, 0.29, 0.27, 0.001, "+C", (x, y, z, u, v) => {
-      const weave = (Math.sin(u * 900) * Math.sin(v * 900)) * 0.03, fold = Math.abs(u - 0.29) < 0.006 ? -0.12 : 0;
-      mat(0.8 + weave + fold, 0.77 + weave + fold, 0.71 + weave + fold, 0.05, 10);
-    }, { dens: 1.4 });
-  }
-  const GR = 0.15, GH = 0.31, GY = TY + 0.004;
-  // liquid
-  addLathe(S, gx, GY, gz, [[0.128, 0.035], [0.128, 0.17]], (x, y, z, ang, h) => { const k = 0.6 + h * 2.2; mat(0.8 * k, 0.36 * k, 0.07 * k, 0.6, 40); }, { inside: true, alpha: 0.8, dens: 1.6 });
-  addLathe(S, gx, GY, gz, [[0.128, 0.17], [0, 0.17]], (x, y, z, ang, h, r) => mat(0.95, 0.52, 0.14, 1.0, 50), { alpha: 0.75, dens: 1.6 });
-  // ice
-  for (const [ox, oz, yaw, h] of [[-0.04, -0.03, 0.3, 0.19], [0.05, 0.02, 1.1, 0.2], [-0.01, 0.06, 0.7, 0.155]]){
-    const ax = yawAxes(yaw), tilt = 0.25;
-    const C = [Math.sin(tilt) * ax[1][0], Math.cos(tilt), Math.sin(tilt) * ax[1][2]], B = [ax[1][0] * Math.cos(tilt), -Math.sin(tilt), ax[1][2] * Math.cos(tilt)];
-    addOBox(S, [gx + ox, GY + h, gz + oz], ax[0], B, C, 0.04, 0.04, 0.038, "+C +B -B +A -A", () => mat(0.75, 0.86, 0.95, 1.4, 80), { dens: 1.8, alpha: 0.38 });
-  }
-  // glass: faint walls, bright rim and base; the grazing edges thicken on their own like real fresnel
-  const glassMat = (x, y, z, ang) => mat(0.55, 0.62, 0.66, 1.6, 90, streak(ang) * 0.2);
-  addLathe(S, gx, GY, gz, [[GR - 0.004, 0], [GR, 0.01], [GR, GH]], glassMat, { alpha: 0.05, specAlpha: 1.4, dens: 1.5 });
-  addLathe(S, gx, GY, gz, [[GR - 0.012, GH], [GR - 0.012, 0.035]], glassMat, { alpha: 0.04, specAlpha: 1.0, inside: true, dens: 1.3 });
-  addLathe(S, gx, GY, gz, [[GR, GH], [GR - 0.012, GH]], () => mat(0.9, 0.92, 0.95, 1.2, 60), { alpha: 0.55, dens: 2.2 });
-  addLathe(S, gx, GY, gz, [[GR - 0.012, 0.035], [0, 0.035]], () => mat(0.9, 0.75, 0.55, 0.8, 50), { alpha: 0.22, dens: 1.5 });
-  for (let i = 0; i < 45; i++){ const a = mix(-0.4, 3.5, rnd()) + Math.PI * 0.5, h = mix(0.02, 0.24, rnd()); S.iso(gx + Math.cos(a) * (GR + 0.002), GY + h, gz + Math.sin(a) * (GR + 0.002), 0.0018 + rnd() * 0.0015, 0.95, 0.9, 0.85, 0.4, 0); }
-  // lime wheel perched on the rim
-  { const cx = gx + 0.13, cy = GY + GH - 0.035, cz = gz + 0.05, R = 0.068, yaw = 0.5;
-    const A = [Math.cos(yaw), 0, Math.sin(yaw)], N = [-Math.sin(yaw) * 0.3, 0.4, Math.cos(yaw)], nl = Math.hypot(N[0], N[1], N[2]); N[0] /= nl; N[1] /= nl; N[2] /= nl;
-    const B = [N[1] * A[2] - N[2] * A[1], N[2] * A[0] - N[0] * A[2], N[0] * A[1] - N[1] * A[0]];
-    for (let r = 0.003; r < R; r += 0.0045){
-      const nA = Math.max(6, Math.ceil(TAU * r / 0.0045));
-      for (let k = 0; k < nA; k++){
-        const a = (k + rnd()) / nA * TAU, ca = Math.cos(a), sa = Math.sin(a), rr = r / R;
-        const px = cx + (A[0] * ca + B[0] * sa) * r, py = cy + (A[1] * ca + B[1] * sa) * r, pz = cz + (A[2] * ca + B[2] * sa) * r;
-        const seg = (a / TAU * 10) % 1;
-        if (rr > 0.93) mat(0.12, 0.3, 0.05, 0.5, 40); else if (rr > 0.84) mat(0.85, 0.88, 0.68, 0.3, 30);
-        else if (seg < 0.07 || seg > 0.93 || rr < 0.08) mat(0.8, 0.86, 0.6, 0.4, 30); else mat(0.48 + rnd() * 0.08, 0.72, 0.18, 0.9, 50);
-        EM = 0.12; shade(px, py, pz, N[0], N[1], N[2], 1); OR = Math.min(1, OR + AR * 0.22); OG = Math.min(1, OG + AG * 0.22); OB = Math.min(1, OB + AB * 0.12);
-        S.add(px, py, pz, -sa * A[0] + ca * B[0], -sa * A[1] + ca * B[1], -sa * A[2] + ca * B[2], 0.0035, ca * A[0] + sa * B[0], ca * A[1] + sa * B[1], ca * A[2] + sa * B[2], 0.0028, N[0], N[1], N[2], 0.001, OR, OG, OB, 0.95, OF);
-      }
-    }
-  }
-  // jigger, lime halves
-  addLathe(S, 0.6, TY, -1.88, [[0.028, 0], [0.034, 0.004], [0.018, 0.055], [0.04, 0.115], [0.042, 0.118]], steel(0.55), { dens: 2 });
-  const limeFace = (x, y, z, ang, h, r, seg) => {
-    if (seg === 7){ const rr = r / 0.058, sg = (ang / TAU * 10 + 10) % 1;
-      if (rr > 0.94) return mat(0.12, 0.3, 0.05, 0.5, 40); if (rr > 0.85) return mat(0.85, 0.88, 0.68, 0.3, 30);
-      if (sg < 0.07 || sg > 0.93 || rr < 0.1) return mat(0.8, 0.86, 0.6, 0.4, 30); return mat(0.5, 0.74, 0.18, 0.9, 55); }
-    const d = vnoise(x * 300, z * 300 + y * 300); mat(0.1 + d * 0.04, 0.3 + d * 0.06, 0.05, 0.6, 35);
-  };
-  addLathe(S, 0.62, TY, -2.55, hemiUp(0.058, 7), limeFace, { dens: 2 });
-  addLathe(S, 0.78, TY, -2.42, dome(0.058, 7), (x, y, z) => { const d = vnoise(x * 300, z * 300 + y * 300); mat(0.1 + d * 0.04, 0.3 + d * 0.06, 0.05, 0.6, 35); }, { dens: 2 });
-
-  // shaker and bottle
-  addLathe(S, 1.42, TY, -2.75, [[0.07, 0], [0.082, 0.015], [0.088, 0.24], [0.072, 0.29], [0.052, 0.35], [0.042, 0.37], [0.046, 0.41], [0.03, 0.43], [0, 0.435]], steel(0.5), { dens: 1.6 });
-  addLathe(S, -0.42, TY, -4.35, [[0.11, 0], [0.115, 0.02], [0.115, 0.5], [0.1, 0.58], [0.05, 0.66], [0.034, 0.7], [0.034, 0.86], [0.042, 0.875], [0.042, 0.92], [0, 0.925]], (x, y, z, ang, h) => {
-    const front = Math.sin(ang) > -0.1;
-    if (front && h > 0.14 && h < 0.38){
-      const stripe = (h > 0.3 && h < 0.33) || (h > 0.19 && h < 0.2) ? 0.35 : 1, ink = h > 0.22 && h < 0.29 && vnoise(ang * 30, h * 60) > 0.55 ? 0.35 : 1;
-      return mat(0.82 * stripe * ink, 0.76 * stripe * ink, 0.62 * stripe * ink, 0.15, 20);
-    }
-    if (h > 0.86) return mat(0.5, 0.12, 0.1, 0.6, 40);     // wax seal
-    mat(0.2, 0.1, 0.035, 1.5, 80, streak(ang) * 0.35);
-  }, { dens: 1.3, alpha: 0.95 });
-
-  // ---- pan of vegetables on a cork trivet, back right, with steam
-  const px0 = 0.95, pz0 = -3.85;
-  addLathe(S, px0, TY, pz0, [[0.48, 0], [0.48, 0.016], [0, 0.016]], (x, y, z) => { const n = h2(Math.floor(x * 250), Math.floor(z * 250)); mat(0.5 + n * 0.15, 0.36 + n * 0.1, 0.22 + n * 0.06, 0.05, 10); }, { dens: 1.2 });
-  const PY = TY + 0.016;
-  addLathe(S, px0, PY, pz0, [[0.36, 0], [0.4, 0.02], [0.43, 0.12], [0.438, 0.128]], blackMetal, { dens: 1.15 });
-  addLathe(S, px0, PY, pz0, [[0.432, 0.128], [0.405, 0.03]], () => mat(0.05, 0.05, 0.055, 0.6, 30), { inside: true, dens: 1.15 });
-  { const hd = [0.78, 0.13, -0.6], hl = Math.hypot(hd[0], hd[1], hd[2]); hd[0] /= hl; hd[1] /= hl; hd[2] /= hl;
-    const a0 = [px0 + hd[0] * 0.43, PY + 0.11, pz0 + hd[2] * 0.43];
-    addCyl(S, a0[0], a0[1], a0[2], a0[0] + hd[0] * 0.55, a0[1] + hd[1] * 0.55, a0[2] + hd[2] * 0.55, 0.022, blackMetal, { dens: 1.3 }); }
-  const veg = [[0.72, 0.1, 0.05], [0.88, 0.62, 0.08], [0.22, 0.46, 0.1], [0.82, 0.7, 0.5], [0.45, 0.22, 0.08], [0.6, 0.08, 0.04]];
-  for (let i = 0; i < 2600; i++){
-    const a = rnd() * TAU, r = 0.38 * Math.sqrt(rnd()), x = px0 + Math.cos(a) * r, z = pz0 + Math.sin(a) * r, y = PY + 0.03 + (1 - r / 0.38) * 0.025 + rnd() * 0.012;
-    const c = veg[(rnd() * veg.length) | 0], ax = randAxes(), sz = 0.008 + rnd() * 0.012;
-    mat(c[0], c[1], c[2], 0.7, 45); shade(x, y, z, ax[6] * 0.4, 1, ax[8] * 0.4, 0.85);
-    S.add(x, y, z, ax[0], ax[1], ax[2], sz, ax[3], ax[4], ax[5], sz * 0.6, ax[6], ax[7], ax[8], sz * 0.35, OR, OG, OB, 0.98, OF);
-  }
-  for (let i = 0; i < 420; i++){ const a = rnd() * TAU, r = 0.3 * Math.sqrt(rnd());
-    S.iso(px0 + Math.cos(a) * r, PY + 0.05, pz0 + Math.sin(a) * r, 0.018 + rnd() * 0.02, 0.92, 0.86, 0.8, 0.03 + rnd() * 0.015, 3 + rnd()); }
-
-  // ---- candle in a brass dish, back left
-  const cx0 = -1.55, cz0 = -3.95;
-  addLathe(S, cx0, TY, cz0, [[0.12, 0], [0.135, 0.008], [0.14, 0.022], [0.125, 0.022], [0, 0.014]], () => mat(0.55, 0.4, 0.16, 1.2, 50), { dens: 1.5 });
-  addLathe(S, cx0, TY + 0.016, cz0, [[0.072, 0], [0.072, 0.25], [0.058, 0.256], [0, 0.262]], (x, y, z, ang, h) => { const glow = Math.max(0, h - 0.17) * 6; mat(0.9 + glow * 0.2, 0.84 + glow * 0.1, 0.7, 0.2, 20); }, { dens: 1.6 });
-  { const fy = TY + 0.016 + 0.262;
-    S.ell(cx0, fy + 0.004, cz0, 0.0015, 0.008, 0.0015, 0.05, 0.04, 0.03, 0.95, 0);
-    S.ell(cx0, fy + 0.012, cz0, 0.007, 0.012, 0.007, 0.35, 0.45, 1, 0.45, 1);
-    S.ell(cx0, fy + 0.035, cz0, 0.016, 0.04, 0.016, 1, 0.58, 0.18, 0.55, 1);
-    S.ell(cx0, fy + 0.03, cz0, 0.008, 0.024, 0.008, 1, 0.96, 0.8, 0.95, 1);
-    S.iso(cx0, fy + 0.035, cz0, 0.09, 1, 0.6, 0.25, 0.22, 1);
-    S.iso(cx0, fy + 0.03, cz0, 0.28, 1, 0.55, 0.22, 0.05, 1);
-  }
-
-  // crumbs + salt flakes near the board
-  for (let i = 0; i < 90; i++){ const x = mix(-1.7, 0.3, rnd()), z = mix(-1.5, -3.3, rnd()); if (x > -1.45 && x < -0.1 && z < -2.22 && z > -3.0) continue;
-    const salt = rnd() < 0.4; mat(salt ? 0.7 : 0.45, salt ? 0.7 : 0.3, salt ? 0.68 : 0.14, salt ? 0.4 : 0.1, 40); shade(x, TY + 0.002, z, 0, 1, 0, 1);
-    S.iso(x, TY + 0.002, z, 0.0025 + rnd() * 0.0025, OR, OG, OB, 0.95, OF); }
-  // dust motes in the lamp cone
-  for (let i = 0; i < 110; i++){ const t = rnd(), r = (0.2 + 1.1 * t) * Math.sqrt(rnd()), a = rnd() * TAU;
-    const x = lampX + Math.cos(a) * r, y = lampY - t * 1.5, z = lampZ + Math.sin(a) * r;
-    S.iso(x, y, z, 0.002 + rnd() * 0.0015, 0.9, 0.75, 0.55, 0.12 + rnd() * 0.18, 2 + rnd()); }
-  for (let i = 0; i < S.n; i++) S.d[i * STRIDE + 2] += SHIFT_Z;
   return S;
 }
 
@@ -709,9 +404,9 @@ function pack(S){
 
 /* =========================================================================
    5. WebGL2 renderer
-   Each quad is sized to where its gaussian actually stays visible: a faint
-   splat (alpha 0.05) only needs ~2.2 sigma instead of 3, so haze, glows and
-   glass cost far fewer pixels. That's the main fill-rate saving.
+   Pass 1: the tiles (one textured quad, mipmapped). Pass 2: the splats, back to front.
+   Each quad is sized to where its gaussian is still visible, and photo splats get a slightly
+   flat-topped profile (u_opac) so neighbouring pixels close up crisply instead of going soft.
    ========================================================================= */
 const canvas = $("gl");
 const gl = canvas.getContext("webgl2", { antialias: false, premultipliedAlpha: true, alpha: false, powerPreference: "high-performance", desynchronized: true });
@@ -722,9 +417,9 @@ precision highp float; precision highp int; precision highp usampler2D;
 uniform usampler2D u_tex;
 uniform mat4 u_proj;
 uniform vec3 u_eye;
-uniform vec2 u_rot;                                  // cos/sin of the camera roll
+uniform vec2 u_rot;
 uniform vec2 u_focal, u_viewport;
-uniform float u_time, u_flick;
+uniform float u_time, u_base, u_depth, u_opac;
 in vec2 a_pos;
 out vec4 v_col; out vec2 v_p;
 void main(){
@@ -732,29 +427,17 @@ void main(){
   ivec2 tc = ivec2((id & 1023) << 1, id >> 10);
   uvec4 c0 = texelFetch(u_tex, tc, 0);
   vec3 p = uintBitsToFloat(c0.xyz);
-  float w = uintBitsToFloat(c0.w);
-  float fl = 1.0, am = 1.0, cs = 1.0;
-  if (w >= 3.0) {                                   // steam: rise, drift, swell, fade
-    float s = (w - 3.0) * 6.2831853;
-    float ph = fract(u_time * 0.14 + (w - 3.0) * 7.31);
-    p += vec3(sin(u_time * 0.6 + s * 5.0) * 0.07 * ph + ph * 0.06, ph * 0.85, cos(u_time * 0.5 + s * 3.0) * 0.05 * ph);
-    cs = 1.0 + ph * 2.2;
-    am = smoothstep(0.0, 0.12, ph) * (1.0 - ph);
-  } else if (w >= 2.0) {                            // dust: slow drift and twinkle
-    float s = (w - 2.0) * 6.2831853;
-    p += vec3(sin(u_time * 0.17 + s * 7.0) * 0.06, sin(u_time * 0.12 + s * 11.0) * 0.05, cos(u_time * 0.15 + s * 5.0) * 0.06);
-    am = 0.55 + 0.45 * sin(u_time * 1.1 + s * 17.0);
-  } else {
-    fl = 1.0 - w + w * u_flick;                     // candle-lit share flickers
-  }
+  p.z = u_base + (p.z - u_base) * u_depth;                       // depth exaggeration about the table plane
   uvec4 c1 = texelFetch(u_tex, tc + ivec2(1, 0), 0);
-  float alpha = float(c1.w >> 24) / 255.0 * am;
-  vec3 cam = p - u_eye;                             // translation, then a roll around the view axis (depth order unchanged)
+  float alpha = float(c1.w >> 24) / 255.0 * u_opac;
+  vec3 cam = p - u_eye;
   cam.xy = vec2(u_rot.x * cam.x - u_rot.y * cam.y, u_rot.y * cam.x + u_rot.x * cam.y);
   vec4 clip = u_proj * vec4(cam, 1.0);
   if (cam.z > -0.03 || alpha < 0.004 || abs(clip.x) > 1.45 * clip.w || abs(clip.y) > 1.45 * clip.w) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
   vec2 h1 = unpackHalf2x16(c1.x), h2 = unpackHalf2x16(c1.y), h3 = unpackHalf2x16(c1.z);
-  mat3 V = mat3(h1.x, h1.y, h2.x,  h1.y, h2.y, h3.x,  h2.x, h3.x, h3.y) * (${(1 / COV_SCALE).toFixed(6)} * cs * cs);
+  mat3 V = mat3(h1.x, h1.y, h2.x,  h1.y, h2.y, h3.x,  h2.x, h3.x, h3.y) * ${(1 / COV_SCALE).toFixed(6)};
+  mat3 D = mat3(1.0, 0.0, 0.0,  0.0, 1.0, 0.0,  0.0, 0.0, u_depth);
+  V = D * V * D;
   float iz = 1.0 / cam.z;
   mat3 J = mat3(-u_focal.x * iz, 0.0, 0.0,
                 0.0, -u_focal.y * iz, 0.0,
@@ -762,17 +445,17 @@ void main(){
   mat3 R = mat3(u_rot.x, u_rot.y, 0.0,  -u_rot.y, u_rot.x, 0.0,  0.0, 0.0, 1.0);
   mat3 T = J * R;
   mat3 C = T * V * transpose(T);
-  float a = C[0][0] + 0.3, b = C[0][1], d = C[1][1] + 0.3;
+  float a = C[0][0] + 0.25, b = C[0][1], d = C[1][1] + 0.25;
   float mid = 0.5 * (a + d), rad = length(vec2(0.5 * (a - d), b));
-  float l1 = mid + rad, l2 = max(mid - rad, 0.09);
+  float l1 = mid + rad, l2 = max(mid - rad, 0.06);
   vec2 e1 = abs(b) < 1e-7 ? (a >= d ? vec2(1.0, 0.0) : vec2(0.0, 1.0)) : normalize(vec2(b, l1 - a));
   vec2 e2 = vec2(-e1.y, e1.x);
-  float ext = min(3.0, sqrt(2.0 * log(alpha * 255.0)));          // how far out this splat is still visible
+  float ext = min(3.0, sqrt(2.0 * log(alpha * 255.0)));
   float r1 = min(sqrt(l1), 600.0) * ext, r2 = min(sqrt(l2), 600.0) * ext;
   vec2 ndc = clip.xy / clip.w;
   gl_Position = vec4(ndc + (a_pos.x * r1 * e1 + a_pos.y * r2 * e2) * 2.0 / u_viewport, 0.0, 1.0);
   vec3 col = vec3(float(c1.w & 255u), float((c1.w >> 8) & 255u), float((c1.w >> 16) & 255u)) / 255.0;
-  v_col = vec4(col * fl, alpha);
+  v_col = vec4(col, alpha);
   v_p = a_pos * ext;
 }`;
 const FS = `#version 300 es
@@ -780,35 +463,71 @@ precision mediump float;
 in vec4 v_col; in vec2 v_p;
 out vec4 o;
 void main(){
-  float a = min(0.995, exp(-0.5 * dot(v_p, v_p)) * v_col.a);
+  float a = min(0.998, exp(-0.5 * dot(v_p, v_p)) * v_col.a);
   if (a < 0.004) discard;
   o = vec4(v_col.rgb * a, a);
 }`;
+const BG_VS = `#version 300 es
+precision highp float;
+uniform mat4 u_proj; uniform vec3 u_eye; uniform vec2 u_rot; uniform vec4 u_rect; uniform float u_z;
+in vec2 a_pos;
+out vec2 v_uv;
+void main(){
+  vec2 uv = a_pos * 0.5 + 0.5;
+  vec3 cam = vec3(mix(u_rect.x, u_rect.z, uv.x), mix(u_rect.y, u_rect.w, uv.y), u_z) - u_eye;
+  cam.xy = vec2(u_rot.x * cam.x - u_rot.y * cam.y, u_rot.y * cam.x + u_rot.x * cam.y);
+  gl_Position = u_proj * vec4(cam, 1.0);
+  v_uv = vec2(uv.x, 1.0 - uv.y);
+}`;
+const BG_FS = `#version 300 es
+precision mediump float;
+uniform sampler2D u_bg;
+in vec2 v_uv; out vec4 o;
+void main(){ o = vec4(texture(u_bg, v_uv).rgb, 1.0); }`;
+
 function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
-const prog = gl.createProgram();
-gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-gl.useProgram(prog);
-const U = {}; for (const n of ["u_tex", "u_proj", "u_eye", "u_rot", "u_focal", "u_viewport", "u_time", "u_flick"]) U[n] = gl.getUniformLocation(prog, n);
+function program(vs, fs, names){
+  const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, "a_pos"); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; for (const n of names) u[n] = gl.getUniformLocation(p, n); return { p, u };
+}
+const SPL = program(VS, FS, ["u_tex", "u_proj", "u_eye", "u_rot", "u_focal", "u_viewport", "u_time", "u_base", "u_depth", "u_opac"]);
+const BG = program(BG_VS, BG_FS, ["u_proj", "u_eye", "u_rot", "u_rect", "u_z", "u_bg"]);
+const U = SPL.u;
+
 const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
 const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-const aPos = gl.getAttribLocation(prog, "a_pos"); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+const tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-gl.uniform1i(U.u_tex, 0);
-gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+const bgTex = gl.createTexture();
+let bgReady = false;
+function uploadBackground(bmp){
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bgTex);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const an = gl.getExtension("EXT_texture_filter_anisotropic");
+  if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  gl.activeTexture(gl.TEXTURE0);
+  bgReady = true;
+}
 
-let drawCount = 0, table = null, sceneKind = "table";
+let drawCount = 0, photoScene = null, sceneKind = "photo";
 function setScene(S, kind){
   const P = pack(S);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, 2048, P.rows, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, P.u32);
   drawCount = P.n; sceneKind = kind;
   $("count").textContent = P.n.toLocaleString("en-US");
   $("captureTools").hidden = kind !== "capture";
-  $("word").textContent = kind === "capture" ? "Captured" : "Evening";
+  $("word").textContent = kind === "capture" ? "Captured" : "Muddle";
 }
 
 // Render at the screen's native resolution: one canvas pixel per physical pixel, never scaled down.
@@ -825,7 +544,7 @@ addEventListener("resize", resize); resize();
    Screen spans x in [-1,1], y in [-1/aspect, 1/aspect] at z = 0. Distance is
    locked, so there is never any zoom: the head only slides across and up/down.
    ========================================================================= */
-const SCREEN_HALF_M = 0.15, HEAD_Y0 = 0.45;
+const SCREEN_HALF_M = 0.15, HEAD_Y0 = 0;
 const head = { x: 0, y: HEAD_Y0, z: EYE_Z, roll: 0 };
 const proj = new Float32Array(16);
 function computeMatrices(){
@@ -861,7 +580,7 @@ function springStep(s, target, dt, omega){
 }
 const springX = { x: 0, v: 0 }, springY = { x: 0, v: 0 }, springR = { x: 0, v: 0 };
 
-let mode = "auto", lastPointer = -1e9, gain = 1.4, tiltGain = 1;
+let mode = "auto", lastPointer = -1e9, gain = 1.4, tiltGain = 0.2;
 const pointer = { x: 0, y: 0 };
 function setMode(m){ mode = m; $("mode").textContent = m === "face" ? "head" : m; $("mdot").classList.toggle("live", m === "face"); }
 addEventListener("pointermove", (e) => {
@@ -951,48 +670,9 @@ function pollTracker(now){
 }
 
 /* =========================================================================
-   7. Candle flicker and the kitchen soundscape
-   ========================================================================= */
-let flick = 1;
-function updateFlicker(t){
-  if (reduceMotion){ flick = 1; return; }
-  const gust = Math.max(0, Math.sin(t * 0.37) * Math.sin(t * 0.91 + 1.3));
-  flick = 0.86 + 0.07 * Math.sin(t * 11.3) + 0.05 * Math.sin(t * 17.9 + 2.1) + 0.04 * Math.sin(t * 5.3 + 0.7) - gust * gust * 0.25 * (0.5 + 0.5 * Math.sin(t * 29));
-}
-let audio = null;
-function toggleSound(){
-  const b = $("sound");
-  if (audio){ audio.master.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.08); const a = audio; setTimeout(() => a.ctx.close(), 400); audio = null; b.setAttribute("aria-pressed", "false"); b.textContent = "Sound off"; return; }
-  const AC = window.AudioContext || window.webkitAudioContext; if (!AC){ toast("Web Audio isn't available in this browser."); return; }
-  const ctx = new AC(), master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
-  // sizzle: hiss plus random oil pops, baked into a looping buffer
-  const len = ctx.sampleRate * 6, buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++){
-    const ch = buf.getChannelData(c); let env = 0;
-    for (let i = 0; i < len; i++){
-      if (Math.random() < 0.0009) env = 0.5 + Math.random() * 0.8;
-      env *= 0.9985;
-      ch[i] = (Math.random() * 2 - 1) * (0.16 + env * (Math.random() < 0.3 ? 1 : 0.2));
-    }
-  }
-  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
-  const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2400;
-  const pk = ctx.createBiquadFilter(); pk.type = "peaking"; pk.frequency.value = 6000; pk.gain.value = 4;
-  const sg = ctx.createGain(); sg.gain.value = 0.22; src.connect(hp); hp.connect(pk); pk.connect(sg); sg.connect(master); src.start();
-  // room tone
-  const rl = ctx.sampleRate * 3, rb = ctx.createBuffer(1, rl, ctx.sampleRate), rc = rb.getChannelData(0); let last = 0;
-  for (let i = 0; i < rl; i++){ last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; rc[i] = last * 3; }
-  const rs = ctx.createBufferSource(); rs.buffer = rb; rs.loop = true; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380;
-  const rg = ctx.createGain(); rg.gain.value = 0.25; rs.connect(lp); lp.connect(rg); rg.connect(master); rs.start();
-  master.gain.setTargetAtTime(0.55, ctx.currentTime, 0.5);
-  audio = { ctx, master };
-  b.setAttribute("aria-pressed", "true"); b.textContent = "Sound on";
-}
-
-/* =========================================================================
    8. Frame loop
    ========================================================================= */
-let last = performance.now(), fpsEma = 60, fpsT = 0, frozen = null;
+let last = performance.now(), fpsEma = 60, fpsT = 0, frozen = null, depthGain = 1;
 function frame(now){
   const dt = Math.min(0.1, (now - last) / 1000); last = now; const t = now / 1000;
   fpsEma = mix(fpsEma, 1 / Math.max(dt, 1e-3), 0.05);
@@ -1001,7 +681,7 @@ function frame(now){
   let tx = 0, ty = 0, tr = 0;
   if (mode === "face"){
     if (face && calib){
-      // predict ahead by the camera + model latency so the scene lands where your head is now, not ~50 ms ago
+      // predict ahead a little to cover camera + model latency
       // (60% of the measured velocity: full prediction overshoots when you stop, this keeps it under ~3%)
       const lead = clamp((now - face.t) / 1000 + 0.02, 0, 0.12) * 0.6;
       tx = (face.x + clamp(face.vx, -8, 8) * lead - calib.x) * gain;
@@ -1011,24 +691,35 @@ function frame(now){
     else if (now - lostAt < 900){ tx = springX.x; ty = springY.x; tr = springR.x; }
   } else {
     if (mode === "pointer" && now - lastPointer > 6000) setMode("auto");
-    if (mode === "pointer"){ tx = pointer.x * 1.1 * gain; ty = -pointer.y * 0.6 * gain; tr = pointer.x * 0.05 * tiltGain; }
-    else { const k = reduceMotion ? 0.3 : 1; tx = Math.sin(t * 0.19) * 0.9 * k; ty = Math.sin(t * 0.27 + 1) * 0.28 * k; tr = Math.sin(t * 0.19 + 0.6) * 0.035 * k * tiltGain; }
+    if (mode === "pointer"){ tx = pointer.x * 1.1 * gain; ty = -pointer.y * 0.75 * gain; tr = pointer.x * 0.05 * tiltGain; }
+    else { const k = reduceMotion ? 0.3 : 1; tx = Math.sin(t * 0.19) * 0.85 * k; ty = Math.sin(t * 0.27 + 1) * 0.4 * k; tr = Math.sin(t * 0.19 + 0.6) * 0.035 * k * tiltGain; }
   }
-  tr = 0.26 * Math.tanh(tr / 0.26);                                       // at most ~15 degrees, eased
-  tx = 1.6 * Math.tanh(tx / 1.6); ty = 0.85 * Math.tanh(ty / 0.85);       // soft limits: ease into the edges
+  tx = 1.6 * Math.tanh(tx / 1.6); ty = 1.0 * Math.tanh(ty / 1.0); tr = 0.26 * Math.tanh(tr / 0.26);
   if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springR.x = tr = frozen.r || 0; springX.v = springY.v = springR.v = 0; }
-  const omega = mode === "face" ? 26 : mode === "pointer" ? 9 : 2.5;   // face: ~40 ms time constant, just enough to round off camera-frame steps
+  const omega = mode === "face" ? 26 : mode === "pointer" ? 9 : 2.5;
   springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega); springStep(springR, tr, dt, omega);
   head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z; head.roll = springR.x;
-  updateFlicker(t);
 
   resize();
   gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clearColor(0.03, 0.024, 0.02, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clearColor(0.03, 0.04, 0.03, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindVertexArray(vao);
+  gl.useProgram(SPL.p); computeMatrices();              // fills `proj` and sets the splat program's camera uniforms
+  if (bgReady && sceneKind === "photo" && photoGeo){
+    const { s, W, H } = photoGeo;
+    gl.useProgram(BG.p); gl.disable(gl.BLEND);
+    gl.uniformMatrix4fv(BG.u.u_proj, false, proj); gl.uniform3f(BG.u.u_eye, head.x, head.y, head.z);
+    gl.uniform2f(BG.u.u_rot, Math.cos(head.roll), Math.sin(head.roll));
+    gl.uniform4f(BG.u.u_rect, (-W / 2 - PHOTO_PAD) * s, (-H / 2 - PHOTO_PAD) * s, (W / 2 + PHOTO_PAD) * s, (H / 2 + PHOTO_PAD) * s);
+    gl.uniform1f(BG.u.u_z, -ZT); gl.uniform1i(BG.u.u_bg, 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
   if (drawCount){
-    computeMatrices();
-    gl.uniform1f(U.u_time, reduceMotion ? 0 : t); gl.uniform1f(U.u_flick, sceneKind === "table" ? flick : 1);
-    gl.bindVertexArray(vao);
+    gl.useProgram(SPL.p); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform1i(U.u_tex, 0);
+    gl.uniform1f(U.u_time, reduceMotion ? 0 : t);
+    const photo = sceneKind === "photo";
+    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain : 1); gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCount);
   }
   requestAnimationFrame(frame);
@@ -1038,12 +729,12 @@ function frame(now){
    9. UI wiring
    ========================================================================= */
 $("track").addEventListener("click", startTracking);
-$("sound").addEventListener("click", toggleSound);
 const setClean = (on) => document.body.classList.toggle("clean", on);
 $("hide").addEventListener("click", () => setClean(true));
 $("show").addEventListener("click", () => setClean(false));
 addEventListener("keydown", (e) => { if ((e.key === "h" || e.key === "H") && e.target.tagName !== "INPUT") setClean(!document.body.classList.contains("clean")); });
 $("gain").addEventListener("input", (e) => { gain = parseFloat(e.target.value); $("gainv").textContent = gain.toFixed(2); });
+$("depth").addEventListener("input", (e) => { depthGain = parseFloat(e.target.value); $("depthv").textContent = depthGain.toFixed(2); });
 $("tiltg").addEventListener("input", (e) => { tiltGain = parseFloat(e.target.value); $("tiltv").textContent = tiltGain.toFixed(2); });
 $("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, r: face.r, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
 
@@ -1064,41 +755,32 @@ addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("drop"
 addEventListener("dragleave", () => { if (--dragDepth <= 0){ dragDepth = 0; $("drop").classList.remove("on"); } });
 addEventListener("dragover", (e) => e.preventDefault());
 addEventListener("drop", async (e) => { e.preventDefault(); dragDepth = 0; $("drop").classList.remove("on"); const f = e.dataTransfer.files[0]; if (f) await loadBuffer(await f.arrayBuffer(), f.name); });
-
-const SAMPLE_URL = "https://huggingface.co/cakewalk/splat-data/resolve/main/train.splat";
-$("sample").addEventListener("click", async () => {
-  const b = $("sample"); b.disabled = true;
-  try {
-    const res = await fetch(SAMPLE_URL, { mode: "cors" });
-    if (!res.ok) throw new Error(res.status);
-    const total = +res.headers.get("content-length") || 0, reader = res.body.getReader(), parts = []; let got = 0;
-    for (;;){ const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length; b.textContent = total ? `Downloading ${Math.round(got / total * 100)}%` : `Downloading ${(got / 1e6).toFixed(0)} MB`; }
-    const all = new Uint8Array(got); let o = 0; for (const p of parts){ all.set(p, o); o += p.length; }
-    await loadBuffer(all.buffer, "train.splat");
-  } catch (e){
-    toast("The sample capture couldn't download here (it's hosted on Hugging Face). Drop your own .ply or .splat onto the page instead.", 7000);
-  }
-  b.disabled = false; b.textContent = "Sample capture";
-});
 $("flip").addEventListener("click", () => { capture.rot = mul3(rotX(Math.PI), capture.rot); rebuildCapture(); });
 $("turn").addEventListener("click", () => { capture.rot = mul3(rotY(Math.PI / 2), capture.rot); rebuildCapture(); });
 $("tilt").addEventListener("click", () => { capture.rot = mul3(rotX(Math.PI / 2), capture.rot); rebuildCapture(); });
 let distT = 0;
 $("dist").addEventListener("input", (e) => { capture.dist = parseFloat(e.target.value); $("distv").textContent = capture.dist.toFixed(2); clearTimeout(distT); distT = setTimeout(rebuildCapture, 60); });
-$("back").addEventListener("click", () => { capture = null; setScene(table, "table"); });
+$("back").addEventListener("click", () => { capture = null; setScene(photoScene, "photo"); });
 
 // test hook: freeze the head at a given offset
 window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount };
 
 async function boot(){
-  await new Promise(r => setTimeout(r, 20));
-  const t0 = performance.now();
-  const nativeW = Math.max(innerWidth, innerHeight * 16 / 9) * (window.devicePixelRatio || 1);
-  DENS_K = clamp(4 / (1.8 * nativeW), 0.0011, 0.0016);
-  table = buildTable();
-  setScene(table, "table");
-  window.__window.buildMs = Math.round(performance.now() - t0);
-  $("loader").classList.add("done");
+  try {
+    const step = (t) => { $("loadstep").textContent = t; };
+    step("loading photo");
+    const [photo, height, table] = await Promise.all([loadImage("assets/photo.jpg"), loadImage("assets/height.png"), loadImage("assets/table.jpg")]);
+    step("lifting it into depth");
+    await new Promise(r => setTimeout(r, 20));
+    const t0 = performance.now();
+    photoScene = buildPhoto(photo, height);
+    uploadBackground(table);
+    setScene(photoScene, "photo");
+    window.__window.buildMs = Math.round(performance.now() - t0);
+    $("loader").classList.add("done");
+  } catch (e){
+    $("loader").innerHTML = "The counter didn't load.<br><span>" + (location.protocol === "file:" ? "Open it through a web server (or the live site); browsers block local image reads." : (e.message || "Reload to try again.")) + "</span>";
+  }
 }
 requestAnimationFrame(frame);
 boot();
