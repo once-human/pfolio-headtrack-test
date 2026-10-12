@@ -115,7 +115,7 @@ body.clean #show:hover{opacity:1}
   <div class="bottom">
     <div class="placard">
       <h1 id="word">Evening</h1>
-      <p class="lede">Dinner's on the stove and the drink is poured. Every grain of this table is a gaussian splat, and your screen is the glass in front of it. Turn on head tracking, then <em>lean left, right, up and down</em>.</p>
+      <p class="lede">Dinner's on the stove and the drink is poured. Every grain of this table is a gaussian splat, and your screen is the glass in front of it. Turn on head tracking, then <em>lean around and tilt your head</em>.</p>
       <div class="row">
         <button class="primary" id="track">Turn on head tracking</button>
         <button id="sound" aria-pressed="false">Sound off</button>
@@ -132,6 +132,7 @@ body.clean #show:hover{opacity:1}
       <div class="tools">
         <h2>Window</h2>
         <label class="slider" for="gain">Parallax <input id="gain" type="range" min="0.6" max="2.6" step="0.05" value="1.4"><output id="gainv">1.40</output></label>
+        <label class="slider" for="tiltg">Tilt <input id="tiltg" type="range" min="0" max="2" step="0.05" value="1"><output id="tiltv">1.00</output></label>
         <div class="row">
           <button id="quality">Render: 4K</button>
           <button id="recenter">Recenter</button>
@@ -719,6 +720,7 @@ precision highp float; precision highp int; precision highp usampler2D;
 uniform usampler2D u_tex;
 uniform mat4 u_proj;
 uniform vec3 u_eye;
+uniform vec2 u_rot;                                  // cos/sin of the camera roll
 uniform vec2 u_focal, u_viewport;
 uniform float u_time, u_flick;
 in vec2 a_pos;
@@ -745,16 +747,19 @@ void main(){
   }
   uvec4 c1 = texelFetch(u_tex, tc + ivec2(1, 0), 0);
   float alpha = float(c1.w >> 24) / 255.0 * am;
-  vec3 cam = p - u_eye;                             // the view never rotates: camera space is a translation
+  vec3 cam = p - u_eye;                             // translation, then a roll around the view axis (depth order unchanged)
+  cam.xy = vec2(u_rot.x * cam.x - u_rot.y * cam.y, u_rot.y * cam.x + u_rot.x * cam.y);
   vec4 clip = u_proj * vec4(cam, 1.0);
-  if (cam.z > -0.03 || alpha < 0.004 || abs(clip.x) > 1.2 * clip.w || abs(clip.y) > 1.2 * clip.w) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  if (cam.z > -0.03 || alpha < 0.004 || abs(clip.x) > 1.45 * clip.w || abs(clip.y) > 1.45 * clip.w) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
   vec2 h1 = unpackHalf2x16(c1.x), h2 = unpackHalf2x16(c1.y), h3 = unpackHalf2x16(c1.z);
   mat3 V = mat3(h1.x, h1.y, h2.x,  h1.y, h2.y, h3.x,  h2.x, h3.x, h3.y) * (${(1 / COV_SCALE).toFixed(6)} * cs * cs);
   float iz = 1.0 / cam.z;
   mat3 J = mat3(-u_focal.x * iz, 0.0, 0.0,
                 0.0, -u_focal.y * iz, 0.0,
                 u_focal.x * cam.x * iz * iz, u_focal.y * cam.y * iz * iz, 0.0);
-  mat3 C = J * V * transpose(J);
+  mat3 R = mat3(u_rot.x, u_rot.y, 0.0,  -u_rot.y, u_rot.x, 0.0,  0.0, 0.0, 1.0);
+  mat3 T = J * R;
+  mat3 C = T * V * transpose(T);
   float a = C[0][0] + 0.3, b = C[0][1], d = C[1][1] + 0.3;
   float mid = 0.5 * (a + d), rad = length(vec2(0.5 * (a - d), b));
   float l1 = mid + rad, l2 = max(mid - rad, 0.09);
@@ -782,7 +787,7 @@ const prog = gl.createProgram();
 gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
 if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
 gl.useProgram(prog);
-const U = {}; for (const n of ["u_tex", "u_proj", "u_eye", "u_focal", "u_viewport", "u_time", "u_flick"]) U[n] = gl.getUniformLocation(prog, n);
+const U = {}; for (const n of ["u_tex", "u_proj", "u_eye", "u_rot", "u_focal", "u_viewport", "u_time", "u_flick"]) U[n] = gl.getUniformLocation(prog, n);
 const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
 const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -825,7 +830,7 @@ addEventListener("resize", resize); resize();
    locked, so there is never any zoom: the head only slides across and up/down.
    ========================================================================= */
 const SCREEN_HALF_M = 0.15, HEAD_Y0 = 0.45;
-const head = { x: 0, y: HEAD_Y0, z: EYE_Z };
+const head = { x: 0, y: HEAD_Y0, z: EYE_Z, roll: 0 };
 const proj = new Float32Array(16);
 function computeMatrices(){
   const W = canvas.width, H = canvas.height, ha = H / W;
@@ -836,6 +841,7 @@ function computeMatrices(){
   proj[8] = (r + l) / (r - l); proj[9] = (t + b) / (t - b); proj[10] = -(f + n) / (f - n); proj[11] = -1; proj[14] = -2 * f * n / (f - n);
   gl.uniformMatrix4fv(U.u_proj, false, proj);
   gl.uniform3f(U.u_eye, hx, hy, hz);
+  gl.uniform2f(U.u_rot, Math.cos(head.roll), Math.sin(head.roll));
   gl.uniform2f(U.u_focal, proj[0] * W / 2, proj[5] * H / 2);
   gl.uniform2f(U.u_viewport, W, H);
 }
@@ -857,9 +863,9 @@ function springStep(s, target, dt, omega){
   const nx = (f * s.x + dt * s.v + hhoo * target) * inv, nv = (s.v + hoo * (target - s.x)) * inv;
   s.x = nx; s.v = nv;
 }
-const springX = { x: 0, v: 0 }, springY = { x: 0, v: 0 };
+const springX = { x: 0, v: 0 }, springY = { x: 0, v: 0 }, springR = { x: 0, v: 0 };
 
-let mode = "auto", lastPointer = -1e9, gain = 1.4;
+let mode = "auto", lastPointer = -1e9, gain = 1.4, tiltGain = 1;
 const pointer = { x: 0, y: 0 };
 function setMode(m){ mode = m; $("mode").textContent = m === "face" ? "head" : m; $("mdot").classList.toggle("live", m === "face"); }
 addEventListener("pointermove", (e) => {
@@ -875,7 +881,7 @@ const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`
 const MP_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const HFOV = 62 * Math.PI / 180;
 let tracker = null, stream = null, lastVideoT = -1, face = null, calib = null, lostAt = 0, lastDetect = 0;
-const fx1 = new OneEuro(0.35, 0.3), fy1 = new OneEuro(0.35, 0.3);
+const fx1 = new OneEuro(0.35, 0.3), fy1 = new OneEuro(0.35, 0.3), fr1 = new OneEuro(0.4, 0.4);
 
 async function startTracking(){
   const btn = $("track");
@@ -898,7 +904,7 @@ async function startTracking(){
     calib = null; setMode("face");
     btn.disabled = false; btn.textContent = "Turn off head tracking";
     $("camlabel").textContent = "Tracking";
-    toast("Head tracking is on. Sit about an arm's length away and lean around. Hit Recenter if the view feels off-centre.");
+    toast("Head tracking is on. Sit about an arm's length away, lean around and tilt your head. Hit Recenter if the view feels off-centre.");
   } catch (e){
     stopTracking();
     btn.disabled = false; btn.textContent = "Turn on head tracking";
@@ -930,9 +936,13 @@ function pollTracker(now){
   const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
   const ipd = Math.hypot(rx - lx, ry - ly); if (ipd < 4) return;
   const dist = 0.063 * fpx / ipd, mx = (lx + rx) / 2, my = (ly + ry) / 2, t = now / 1000;
-  face = { x: fx1.f(-(mx - vw / 2) / fpx * dist / SCREEN_HALF_M, t), y: fy1.f(-(my - vh / 2) / fpx * dist / SCREEN_HALF_M, t) };
-  if (!calib) calib = { x: face.x, y: face.y, n: 1 };
-  else if (calib.n < 20){ calib.x = mix(calib.x, face.x, 1 / (calib.n + 1)); calib.y = mix(calib.y, face.y, 1 / (calib.n + 1)); calib.n++; }
+  // roll: angle of the eye line, measured left-to-right in the raw camera image; negated so tilting
+  // your head toward your right shoulder reads as a positive (clockwise, as you see it) tilt
+  const P0 = lx < rx ? [lx, ly] : [rx, ry], P1 = lx < rx ? [rx, ry] : [lx, ly];
+  const roll = -Math.atan2(P1[1] - P0[1], P1[0] - P0[0]);
+  face = { x: fx1.f(-(mx - vw / 2) / fpx * dist / SCREEN_HALF_M, t), y: fy1.f(-(my - vh / 2) / fpx * dist / SCREEN_HALF_M, t), r: fr1.f(roll, t) };
+  if (!calib) calib = { x: face.x, y: face.y, r: face.r, n: 1 };
+  else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.n++; }
   $("camlabel").textContent = `Tracking · ${Math.round(dist * 100)} cm`;
   const sx = cv.width / vw, sy = cv.height / vh;
   g.fillStyle = "#f2a654"; g.strokeStyle = "rgba(242,166,84,.6)"; g.lineWidth = 1.5;
@@ -990,20 +1000,21 @@ function frame(now){
   fpsEma = mix(fpsEma, 1 / Math.max(dt, 1e-3), 0.05);
   if (now - fpsT > 500){ $("fps").textContent = Math.round(fpsEma); fpsT = now; }
   pollTracker(now);
-  let tx = 0, ty = 0;
+  let tx = 0, ty = 0, tr = 0;
   if (mode === "face"){
-    if (face && calib){ tx = (face.x - calib.x) * gain; ty = (face.y - calib.y) * gain; }
-    else if (now - lostAt < 900){ tx = springX.x; ty = springY.x; }
+    if (face && calib){ tx = (face.x - calib.x) * gain; ty = (face.y - calib.y) * gain; tr = (face.r - calib.r) * tiltGain; }
+    else if (now - lostAt < 900){ tx = springX.x; ty = springY.x; tr = springR.x; }
   } else {
     if (mode === "pointer" && now - lastPointer > 6000) setMode("auto");
-    if (mode === "pointer"){ tx = pointer.x * 1.1 * gain; ty = -pointer.y * 0.6 * gain; }
-    else { const k = reduceMotion ? 0.3 : 1; tx = Math.sin(t * 0.19) * 0.9 * k; ty = Math.sin(t * 0.27 + 1) * 0.28 * k; }
+    if (mode === "pointer"){ tx = pointer.x * 1.1 * gain; ty = -pointer.y * 0.6 * gain; tr = pointer.x * 0.05 * tiltGain; }
+    else { const k = reduceMotion ? 0.3 : 1; tx = Math.sin(t * 0.19) * 0.9 * k; ty = Math.sin(t * 0.27 + 1) * 0.28 * k; tr = Math.sin(t * 0.19 + 0.6) * 0.035 * k * tiltGain; }
   }
+  tr = 0.26 * Math.tanh(tr / 0.26);                                       // at most ~15 degrees, eased
   tx = 1.6 * Math.tanh(tx / 1.6); ty = 0.85 * Math.tanh(ty / 0.85);       // soft limits: ease into the edges
-  if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springX.v = springY.v = 0; }
+  if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springR.x = tr = frozen.r || 0; springX.v = springY.v = springR.v = 0; }
   const omega = mode === "face" ? 6.5 : mode === "pointer" ? 4.5 : 2.5;
-  springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega);
-  head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z;
+  springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega); springStep(springR, tr, dt, omega * 0.85);
+  head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z; head.roll = springR.x;
   updateFlicker(t);
 
   resize();
@@ -1028,12 +1039,13 @@ $("hide").addEventListener("click", () => setClean(true));
 $("show").addEventListener("click", () => setClean(false));
 addEventListener("keydown", (e) => { if ((e.key === "h" || e.key === "H") && e.target.tagName !== "INPUT") setClean(!document.body.classList.contains("clean")); });
 $("gain").addEventListener("input", (e) => { gain = parseFloat(e.target.value); $("gainv").textContent = gain.toFixed(2); });
+$("tiltg").addEventListener("input", (e) => { tiltGain = parseFloat(e.target.value); $("tiltv").textContent = tiltGain.toFixed(2); });
 $("quality").addEventListener("click", () => {
   quality = quality === "uhd" ? "fhd" : "uhd";
   $("quality").textContent = "Render: " + QUALITY[quality].label;
   resize();
 });
-$("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
+$("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, r: face.r, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
 
 async function loadBuffer(buf, name){
   $("loader").classList.remove("done"); $("loader").innerHTML = "Reading capture<br>" + name;
@@ -1076,7 +1088,7 @@ $("dist").addEventListener("input", (e) => { capture.dist = parseFloat(e.target.
 $("back").addEventListener("click", () => { capture = null; setScene(table, "table"); });
 
 // test hook: freeze the head at a given offset
-window.__window = { freeze: (x, y) => { frozen = { x, y }; }, release: () => { frozen = null; }, count: () => drawCount };
+window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount };
 
 async function boot(){
   await new Promise(r => setTimeout(r, 20));
