@@ -1,0 +1,1093 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body><title>Evening Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the whole viewport is the "glass", a WebGL window onto a splatted dinner table at night.
+   Type sits lower-left like a placard on the glass; instruments live in the corners. Single dark world by choice. */
+:root{
+  --void:#070605;
+  --glass:rgba(16,13,11,.62);
+  --glass-line:rgba(232,214,196,.14);
+  --ink:#efe8df;
+  --ink-dim:#a59a8e;
+  --flame:#f2a654;
+  --flame-ink:#1f1206;
+  --display:"Big Shoulders Display","Arial Narrow","Helvetica Neue",sans-serif;
+  --body:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--void);color:var(--ink);font-family:var(--body);overflow:hidden;-webkit-font-smoothing:antialiased}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;background:var(--void)}
+.grain{position:fixed;inset:-50%;pointer-events:none;opacity:.09;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -.2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation:grain 1s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-4%)}60%{transform:translate(-4%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+.vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(115% 85% at 50% 50%,transparent 50%,rgba(0,0,0,.6) 100%)}
+.scrim{position:fixed;left:0;right:0;bottom:0;height:min(58vh,500px);pointer-events:none;background:linear-gradient(to top,rgba(5,4,3,.85),rgba(5,4,3,.3) 55%,transparent)}
+
+.ui{position:fixed;inset:0;pointer-events:none;padding:calc(18px + env(safe-area-inset-top,0px)) 22px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;justify-content:space-between;gap:16px;transition:opacity .35s ease}
+.ui > *{pointer-events:auto}
+body.clean .ui,body.clean .scrim{opacity:0;pointer-events:none}
+body.clean .ui > *{pointer-events:none}
+
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim)}
+.top b{color:var(--ink);font-weight:500}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.stats span{white-space:nowrap}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ink-dim);margin-right:7px;vertical-align:1px}
+.dot.live{background:var(--flame);box-shadow:0 0 10px var(--flame)}
+
+.bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:nowrap}
+.bottom > .placard{flex:1 1 auto}
+.bottom > .panel{flex:0 0 auto}
+.placard{max-width:620px;min-width:0;display:flex;flex-direction:column;gap:14px}
+h1{margin:0;font-family:var(--display);font-weight:900;font-size:clamp(64px,min(15vw,24vh),208px);line-height:.8;letter-spacing:-.005em;text-transform:uppercase;color:var(--ink);text-shadow:0 2px 40px rgba(0,0,0,.45)}
+.lede{margin:0;max-width:44ch;font-size:15px;line-height:1.55;color:#d8cfc4;text-wrap:pretty}
+.lede em{font-style:normal;color:var(--flame)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button,.btn{font:500 13px/1 var(--body);letter-spacing:.01em;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);border-radius:999px;padding:11px 16px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .2s,border-color .2s,transform .1s;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+button:hover,.btn:hover{border-color:rgba(239,232,223,.4)}
+button:active,.btn:active{transform:scale(.97)}
+button:focus-visible,.btn:focus-within,input:focus-visible{outline:2px solid var(--flame);outline-offset:2px}
+button.primary{background:var(--flame);color:var(--flame-ink);border-color:transparent;font-weight:600}
+button.primary:hover{background:#f7bb76}
+button[aria-pressed="true"]{border-color:var(--flame);color:var(--flame)}
+.btn input{position:absolute;width:1px;height:1px;opacity:0}
+
+.panel{display:flex;flex-direction:column;gap:10px;align-items:flex-end;min-width:0}
+.tools{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;padding:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);width:min(330px,100%)}
+.tools h2{margin:0;font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim)}
+.tools .row{gap:8px}
+.tools button,.tools .btn{padding:9px 12px;font-size:12px;background:rgba(255,255,255,.04)}
+.slider{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font:400 11px/1 var(--mono);color:var(--ink-dim);letter-spacing:.06em;text-transform:uppercase}
+.slider output{color:var(--ink);font-variant-numeric:tabular-nums;min-width:3.5ch;text-align:right}
+input[type=range]{width:100%;accent-color:var(--flame)}
+.cam{position:relative;width:168px;aspect-ratio:4/3;max-width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--glass-line);background:#000}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.cam video{filter:grayscale(1) contrast(1.1) brightness(.8)}
+.cam span{position:absolute;left:8px;bottom:6px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase}
+
+#show{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));opacity:0;pointer-events:none;padding:8px 12px;font-size:11px;transition:opacity .3s}
+body.clean #show{opacity:.35;pointer-events:auto}
+body.clean #show:hover{opacity:1}
+
+#toast{position:fixed;left:50%;top:calc(56px + env(safe-area-inset-top,0px));transform:translate(-50%,-8px);max-width:min(560px,calc(100% - 32px));background:rgba(14,11,9,.88);border:1px solid var(--glass-line);border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.5;color:var(--ink);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;backdrop-filter:blur(10px)}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#loader{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;font:500 12px/1.6 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);text-align:center;transition:opacity .6s}
+#loader.done{opacity:0}
+#drop{position:fixed;inset:12px;border:1.5px dashed var(--flame);border-radius:20px;display:grid;place-items:center;font:600 clamp(28px,5vw,56px)/1 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--flame);background:rgba(7,6,5,.7);opacity:0;pointer-events:none;transition:opacity .2s}
+#drop.on{opacity:1}
+.kbd{font-family:var(--mono);font-size:10px;padding:2px 6px;border:1px solid var(--glass-line);border-radius:4px;color:var(--ink-dim)}
+
+@media (max-width:720px){
+  .ui{padding-left:16px;padding-right:16px}
+  .bottom{flex-direction:column;align-items:stretch}
+  .panel{align-items:stretch}
+  .tools{width:100%}
+  .cam{width:120px}
+  .lede{font-size:14px}
+  .stats{gap:12px}
+  .scrim{height:78vh}
+}
+@media (prefers-reduced-motion:reduce){.grain{animation:none}}
+</style>
+
+<canvas id="gl" aria-label="A dinner table at night rendered from gaussian splats: a cocktail with ice and lime, a cutting board with tomatoes and basil, a steaming pan and a candle, seen through the screen as if it were a window"></canvas>
+<div class="vignette"></div>
+<div class="grain"></div>
+<div class="scrim"></div>
+<div id="loader">Setting the table</div>
+
+<div class="ui" id="ui">
+  <div class="top">
+    <div><b>21:40</b> / Kitchen table / Window study</div>
+    <div class="stats" aria-live="polite">
+      <span><i class="dot" id="mdot"></i>Mode <b id="mode">auto</b></span>
+      <span>Splats <b id="count">0</b></span>
+      <span>Render <b id="res">–</b></span>
+      <span><b id="fps">0</b> fps</span>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="placard">
+      <h1 id="word">Evening</h1>
+      <p class="lede">Dinner's on the stove and the drink is poured. Every grain of this table is a gaussian splat, and your screen is the glass in front of it. Turn on head tracking, then <em>lean left, right, up and down</em>.</p>
+      <div class="row">
+        <button class="primary" id="track">Turn on head tracking</button>
+        <button id="sound" aria-pressed="false">Sound off</button>
+        <button id="hide">Hide UI <span class="kbd">H</span></button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="cam" id="cam" hidden>
+        <video id="video" playsinline muted></video>
+        <canvas id="camcv" width="320" height="240"></canvas>
+        <span id="camlabel">Searching</span>
+      </div>
+      <div class="tools">
+        <h2>Window</h2>
+        <label class="slider" for="gain">Parallax <input id="gain" type="range" min="0.6" max="2.6" step="0.05" value="1.4"><output id="gainv">1.40</output></label>
+        <div class="row">
+          <button id="quality">Render: 4K</button>
+          <button id="recenter">Recenter</button>
+          <label class="btn" for="file">Load .ply / .splat<input id="file" type="file" accept=".ply,.splat"></label>
+          <button id="sample">Sample capture</button>
+        </div>
+        <div id="captureTools" hidden>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <h2>Capture</h2>
+            <div class="row">
+              <button id="flip">Flip</button>
+              <button id="turn">Turn 90°</button>
+              <button id="tilt">Tilt 90°</button>
+              <button id="back">Back to the table</button>
+            </div>
+            <label class="slider" for="dist">Distance <input id="dist" type="range" min="0.6" max="3" step="0.05" value="1"><output id="distv">1.00</output></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<button id="show">Show UI</button>
+<div id="toast" role="status"></div>
+<div id="drop">Drop a .ply or .splat</div>
+
+<script>
+(() => {
+"use strict";
+
+/* =========================================================================
+   0. Utilities
+   ========================================================================= */
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const mix = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rnd = mulberry32(2140);
+function h2(x, y){ const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
+function vnoise(x, y){
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = h2(xi, yi), b = h2(xi + 1, yi), c = h2(xi, yi + 1), d = h2(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x, y, o){ let s = 0, a = 0.5, f = 1, n = 0; for (let i = 0; i < o; i++){ s += a * vnoise(x * f, y * f); n += a; a *= 0.5; f *= 2.03; } return s / n; }
+let toastT = 0;
+function toast(msg, ms = 4200){ const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("on"), ms); }
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* =========================================================================
+   1. Splat buffer. 14 floats per splat:
+      0-2 position | 3-8 covariance xx xy xz yy yz zz | 9-12 rgba | 13 flag
+      flag 0..1 = share of light from the candle (flickers), 2..3 = drifting dust, 3..4 = rising steam
+   ========================================================================= */
+const STRIDE = 14;
+class Splats {
+  constructor(cap){ this.cap = cap; this.d = new Float32Array(cap * STRIDE); this.n = 0; }
+  grow(){ const nd = new Float32Array(this.cap * 2 * STRIDE); nd.set(this.d); this.d = nd; this.cap *= 2; }
+  add(x, y, z, ax, ay, az, s1, bx, by, bz, s2, cx, cy, cz, s3, r, g, b, a, w){
+    if (this.n >= this.cap) this.grow();
+    const o = this.n++ * STRIDE, d = this.d, q1 = s1 * s1, q2 = s2 * s2, q3 = s3 * s3;
+    d[o] = x; d[o + 1] = y; d[o + 2] = z;
+    d[o + 3] = q1 * ax * ax + q2 * bx * bx + q3 * cx * cx;
+    d[o + 4] = q1 * ax * ay + q2 * bx * by + q3 * cx * cy;
+    d[o + 5] = q1 * ax * az + q2 * bx * bz + q3 * cx * cz;
+    d[o + 6] = q1 * ay * ay + q2 * by * by + q3 * cy * cy;
+    d[o + 7] = q1 * ay * az + q2 * by * bz + q3 * cy * cz;
+    d[o + 8] = q1 * az * az + q2 * bz * bz + q3 * cz * cz;
+    d[o + 9] = r; d[o + 10] = g; d[o + 11] = b; d[o + 12] = a; d[o + 13] = w;
+  }
+  iso(x, y, z, s, r, g, b, a, w){ this.add(x, y, z, 1, 0, 0, s, 0, 1, 0, s, 0, 0, 1, s, r, g, b, a, w); }
+  ell(x, y, z, sx, sy, sz, r, g, b, a, w){ this.add(x, y, z, 1, 0, 0, sx, 0, 1, 0, sy, 0, 0, 1, sz, r, g, b, a, w); }
+}
+function randAxes(){
+  const u1 = rnd(), u2 = rnd() * TAU, u3 = rnd() * TAU, a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
+  const x = a * Math.sin(u2), y = a * Math.cos(u2), z = b * Math.sin(u3), w = b * Math.cos(u3);
+  return [1 - 2 * (y * y + z * z), 2 * (x * y + w * z), 2 * (x * z - w * y),
+          2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x),
+          2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)];
+}
+
+/* =========================================================================
+   2. The table. Units: the screen is 2 wide, centred at the origin in the
+      z = 0 plane; the eye rests at z = 3.6. Table top at y = -0.75.
+      Splat spacing grows with distance from the eye, so every splat covers
+      roughly the same few pixels: detail where you can see it, nothing wasted.
+   ========================================================================= */
+const EYE_Z = 3.6, TY = -0.75;
+const SHIFT_Z = 0.7;   // the whole set is built here, then slid toward the glass by this much
+const sp = (x, y, z, k) => Math.max(0.0018, Math.hypot(x, y - 0.45, z + SHIFT_Z - EYE_Z) * 0.0016 / (k || 1));
+const LIGHTS = [
+  { p: [0.15, 0.56, -3.1],  c: [1.0, 0.74, 0.46], k: 2.5, fo: 0.5 },            // pendant over the table
+  { p: [-1.55, -0.38, -3.95], c: [1.0, 0.56, 0.24], k: 0.55, fo: 4.0, flick: 1 }, // candle
+  { p: [3.2, 1.6, -8.0],    c: [0.42, 0.56, 1.0], k: 2.2, fo: 0.045 },          // cool rim from the window
+  { p: [-3.0, 1.4, -8.6],   c: [1.0, 0.66, 0.4], k: 0.7, fo: 0.25 }             // warm wash on the back wall
+];
+let AR = 0, AG = 0, AB = 0, SPEC = 0, SHIN = 30, EM = 0;   // material out of the albedo functions (EM: reflected-studio glow)
+let OR = 0, OG = 0, OB = 0, OF = 0, OS = 0;          // shaded colour, candle share, specular amount
+function mat(r, g, b, spec, shin, em){ AR = r; AG = g; AB = b; SPEC = spec || 0; SHIN = shin || 30; EM = em || 0; }
+
+function shade(px, py, pz, nx, ny, nz, occ){
+  const amb = 0.06 * occ;
+  let lr = amb * 0.8, lg = amb * 0.9, lb = amb * 1.2, sr = 0, sg = 0, sb = 0, cand = 0;
+  let vx = -px, vy = 0.45 - py, vz = EYE_Z - SHIFT_Z - pz; const vl = Math.hypot(vx, vy, vz); vx /= vl; vy /= vl; vz /= vl;
+  const hasN = !(nx === 0 && ny === 0 && nz === 0);
+  for (let i = 0; i < LIGHTS.length; i++){
+    const L = LIGHTS[i];
+    let lx = L.p[0] - px, ly = L.p[1] - py, lz = L.p[2] - pz;
+    const d2 = lx * lx + ly * ly + lz * lz, id = 1 / Math.sqrt(d2 + 1e-6); lx *= id; ly *= id; lz *= id;
+    const ndl = hasN ? lx * nx + ly * ny + lz * nz : 0.7;
+    const fall = L.k / (1 + d2 * L.fo);
+    const att = fall * Math.max(0, (ndl + 0.12) / 1.12) * (0.55 + 0.45 * occ);
+    lr += att * L.c[0]; lg += att * L.c[1]; lb += att * L.c[2];
+    if (L.flick) cand += att * 0.7;
+    if (SPEC > 0 && hasN && ndl > 0){
+      const hx = lx + vx, hy = ly + vy, hz = lz + vz, hl = Math.hypot(hx, hy, hz);
+      const s = SPEC * Math.pow(Math.max(0, (hx * nx + hy * ny + hz * nz) / hl), SHIN) * fall * 1.6;
+      sr += s * L.c[0]; sg += s * L.c[1]; sb += s * L.c[2]; if (L.flick) cand += s * 0.7;
+    }
+  }
+  const tot = (lr + lg + lb) / 3 + (sr + sg + sb) / 3 + 1e-6;
+  OF = clamp(cand / tot, 0, 1);
+  OS = (sr + sg + sb) / 3 + EM;
+  OR = 1 - Math.exp(-(AR * lr + sr + EM * 1.0) * 1.7) + 0.006;
+  OG = 1 - Math.exp(-(AG * lg + sg + EM * 0.8) * 1.7) + 0.006;
+  OB = 1 - Math.exp(-(AB * lb + sb + EM * 0.62) * 1.7) + 0.01;
+}
+function emit(r, g, b, f){ OR = r; OG = g; OB = b; OF = f || 0; OS = 0; }
+
+// ---- primitives -------------------------------------------------------------
+// flat rectangle (origin + two edges), sampled with distance-aware spacing
+function addRect(S, ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, alb, opt = {}){
+  const L1 = Math.hypot(e1x, e1y, e1z), L2 = Math.hypot(e2x, e2y, e2z);
+  const t1x = e1x / L1, t1y = e1y / L1, t1z = e1z / L1, t2x = e2x / L2, t2y = e2y / L2, t2z = e2z / L2;
+  const dens = opt.dens || 1, alpha = opt.alpha || 0.97, blur = opt.blur || 1;
+  let u = 0;
+  while (u < L1){
+    const s = sp(ox + t1x * u + t2x * L2 * 0.5, oy + t1y * u + t2y * L2 * 0.5, oz + t1z * u + t2z * L2 * 0.5, dens) * blur;
+    for (let v = s * 0.5 * rnd(); v < L2; v += s){
+      const uu = u + (rnd() - 0.5) * s * 0.8, vv = v + (rnd() - 0.5) * s * 0.8;
+      const px = ox + t1x * uu + t2x * vv, py = oy + t1y * uu + t2y * vv, pz = oz + t1z * uu + t2z * vv;
+      if (opt.skip && opt.skip(px, py, pz)) continue;
+      SPEC = 0; alb(px, py, pz, uu, vv);
+      if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, opt.occ ? opt.occ(px, py, pz) : 1);
+      const th = rnd() * Math.PI, c = Math.cos(th), sn = Math.sin(th);
+      S.add(px, py, pz, c * t1x + sn * t2x, c * t1y + sn * t2y, c * t1z + sn * t2z, 0.7 * s * (0.85 + 0.3 * rnd()),
+        -sn * t1x + c * t2x, -sn * t1y + c * t2y, -sn * t1z + c * t2z, 0.7 * s * (0.65 + 0.3 * rnd()),
+        nx, ny, nz, 0.06 * s, OR, OG, OB, alpha, OF);
+    }
+    u += s;
+  }
+}
+// surface of revolution around a vertical axis: prof = [[radius, height], ...] going up/inward
+function addLathe(S, cx, cy, cz, prof, alb, opt = {}){
+  const dens = opt.dens || 1.25, flipN = opt.inside ? -1 : 1, sy = opt.sy || 1;
+  for (let i = 0; i < prof.length - 1; i++){
+    const r0 = prof[i][0], y0 = prof[i][1] * sy, r1 = prof[i + 1][0], y1 = prof[i + 1][1] * sy;
+    const dr = r1 - r0, dy = y1 - y0, len = Math.hypot(dr, dy); if (len < 1e-6) continue;
+    const tr = dr / len, ty = dy / len, nr = ty * flipN, ny = -tr * flipN;
+    let t = 0;
+    while (t < len){
+      const r = r0 + tr * t, y = y0 + ty * t;
+      const s = sp(cx, cy + y, cz + r, dens);
+      const nA = Math.max(5, Math.ceil(TAU * r / s)), ph = rnd() * TAU;
+      for (let k = 0; k < nA; k++){
+        const ang = ph + (k + rnd() * 0.5) / nA * TAU, ca = Math.cos(ang), sa = Math.sin(ang);
+        const px = cx + ca * r, py = cy + y, pz = cz + sa * r;
+        const nx = ca * nr, nz = sa * nr;
+        SPEC = 0; alb(px, py, pz, ang, y, r, i);
+        if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, 1);
+        let a = opt.alpha || 0.97; if (opt.specAlpha) a = clamp(a + OS * opt.specAlpha, 0, 0.95);
+        const around = Math.max(0.6 * TAU * r / nA, 0.0015);
+        S.add(px, py, pz, -sa, 0, ca, around, ca * tr, ty, sa * tr, 0.65 * s, nx, ny, nz, 0.05 * s, OR, OG, OB, a, OF);
+      }
+      t += s;
+    }
+  }
+}
+// straight cylinder between two points
+function addCyl(S, ax, ay, az, bx, by, bz, r, alb, opt = {}){
+  let dx = bx - ax, dy = by - ay, dz = bz - az; const L = Math.hypot(dx, dy, dz); dx /= L; dy /= L; dz /= L;
+  let upx = 0, upy = 1, upz = 0; if (Math.abs(dy) > 0.9){ upx = 1; upy = 0; }
+  let ux = dy * upz - dz * upy, uy = dz * upx - dx * upz, uz = dx * upy - dy * upx; const ul = Math.hypot(ux, uy, uz); ux /= ul; uy /= ul; uz /= ul;
+  const vx = dy * uz - dz * uy, vy = dz * ux - dx * uz, vz = dx * uy - dy * ux;
+  let t = 0;
+  while (t < L){
+    const s = sp(ax + dx * t, ay + dy * t, az + dz * t, opt.dens || 1.4), nA = Math.max(5, Math.ceil(TAU * r / s));
+    for (let k = 0; k < nA; k++){
+      const ang = (k + rnd() * 0.6) / nA * TAU, c = Math.cos(ang), sn = Math.sin(ang);
+      const nx = c * ux + sn * vx, ny = c * uy + sn * vy, nz = c * uz + sn * vz;
+      const px = ax + dx * t + nx * r, py = ay + dy * t + ny * r, pz = az + dz * t + nz * r;
+      SPEC = 0; alb(px, py, pz, ang, t);
+      if (opt.emissive) emit(AR, AG, AB, opt.f); else shade(px, py, pz, nx, ny, nz, 1);
+      S.add(px, py, pz, dx, dy, dz, 0.7 * s, -sn * ux + c * vx, -sn * uy + c * vy, -sn * uz + c * vz, Math.max(0.0012, 0.75 * TAU * r / nA), nx, ny, nz, 0.04 * s, OR, OG, OB, opt.alpha || 0.97, OF);
+    }
+    t += s;
+  }
+}
+// oriented box: centre, axes A (length), B (width), C (up), half sizes
+function addOBox(S, c, A, B, C, ha, hb, hc, faces, alb, opt = {}){
+  const P = (ka, kb, kc) => [c[0] + A[0] * ka + B[0] * kb + C[0] * kc, c[1] + A[1] * ka + B[1] * kb + C[1] * kc, c[2] + A[2] * ka + B[2] * kb + C[2] * kc];
+  const sc = (v, k) => [v[0] * k, v[1] * k, v[2] * k];
+  const face = (o, e1, e2, n) => addRect(S, o[0], o[1], o[2], e1[0], e1[1], e1[2], e2[0], e2[1], e2[2], n[0], n[1], n[2], alb, opt);
+  if (faces.includes("+C")) face(P(-ha, -hb, hc), sc(A, 2 * ha), sc(B, 2 * hb), C);
+  if (faces.includes("+B")) face(P(-ha, hb, -hc), sc(A, 2 * ha), sc(C, 2 * hc), B);
+  if (faces.includes("-B")) face(P(-ha, -hb, -hc), sc(A, 2 * ha), sc(C, 2 * hc), sc(B, -1));
+  if (faces.includes("+A")) face(P(ha, -hb, -hc), sc(B, 2 * hb), sc(C, 2 * hc), A);
+  if (faces.includes("-A")) face(P(-ha, -hb, -hc), sc(B, 2 * hb), sc(C, 2 * hc), sc(A, -1));
+}
+const yawAxes = (a) => [[Math.cos(a), 0, Math.sin(a)], [-Math.sin(a), 0, Math.cos(a)], [0, 1, 0]];
+const hemiUp = (R, n = 7) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI / 2; p.push([R * Math.sin(t), R * (1 - Math.cos(t))]); } p.push([0, R]); return p; };
+const dome = (R, n = 7) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI / 2; p.push([R * Math.cos(t), R * Math.sin(t)]); } return p; };
+const sphere = (R, n = 12) => { const p = []; for (let i = 0; i <= n; i++){ const t = i / n * Math.PI; p.push([R * Math.sin(t), R * (1 - Math.cos(t))]); } return p; };
+
+// ---- materials ----------------------------------------------------------------
+function walnut(x, y, z){
+  const pz = (z + 10) / 0.44, plank = Math.floor(pz), fr = pz - plank;
+  const warp = fbm(x * 0.7 + plank * 3.1, plank * 1.7, 3) * 7;
+  const g = vnoise(x * 1.1 + plank * 17.3, fr * 26 + warp), fine = vnoise(x * 9 + plank * 5, fr * 120);
+  const tone = 0.82 + (h2(plank, 3.7) - 0.5) * 0.3;
+  let r = 0.26 * tone * (0.72 + 0.5 * g + 0.08 * fine), gg = 0.15 * tone * (0.72 + 0.5 * g + 0.08 * fine), b = 0.085 * tone * (0.7 + 0.45 * g);
+  if (fr < 0.012 || fr > 0.988){ r *= 0.25; gg *= 0.25; b *= 0.25; }
+  const ring = fbm(x * 0.5 + 4, z * 0.5, 3); if (ring > 0.62){ const k = (ring - 0.62) * 1.4; r *= 1 - k; gg *= 1 - k; b *= 1 - k; } // old water rings
+  mat(r, gg, b, 0.22, 26);
+}
+function oak(x, y, z){
+  const g = vnoise(x * 2.2, z * 70 + fbm(x * 1.4, z * 3, 3) * 5), k = vnoise(x * 40, z * 4);
+  let r = 0.62 * (0.82 + 0.25 * g), gg = 0.45 * (0.82 + 0.25 * g), b = 0.28 * (0.8 + 0.2 * g);
+  if (k > 0.86 && vnoise(x * 3 + 1, z * 3) > 0.5){ r *= 0.82; gg *= 0.82; b *= 0.82; }                // knife marks
+  mat(r, gg, b, 0.05, 12);
+}
+// polished metal/glass: bright vertical streaks where the lamp and room would reflect (like a studio strip)
+const streak = (ang) => { let ph = ang - Math.PI / 2; ph = Math.atan2(Math.sin(ph), Math.cos(ph));
+  const g = (c, w) => { const k = (ph - c) / w; return Math.exp(-k * k); };
+  return g(0.55, 0.13) + 0.45 * g(-0.95, 0.16) + 0.15 * g(-0.2, 0.5); };
+const steel = (v) => (x, y, z, ang, h) => mat(v * 0.45, v * 0.47, v * 0.5, 1.2, 70, streak(ang) * 0.9);
+const blackMetal = () => mat(0.035, 0.035, 0.04, 0.45, 22);
+
+// ---- the scene -----------------------------------------------------------------
+function buildTable(){
+  rnd = mulberry32(2140);
+  const S = new Splats(1 << 18);
+
+  // table top + front edge
+  addRect(S, -3.4, TY, -0.75, 0, 0, -5.75, 6.8, 0, 0, 0, 1, 0, walnut, { dens: 1 });
+  addRect(S, -3.4, TY - 0.08, -0.75, 6.8, 0, 0, 0, 0.08, 0, 0, 0, 1, (x, y, z) => { walnut(x, y, z); AR *= 0.7; AG *= 0.7; AB *= 0.7; }, { dens: 1 });
+
+  // back wall, deliberately soft (baked depth of field)
+  const winSkip = (x, y, z) => x > 2.4 && x < 5.6 && y > -0.75 && y < 1.8;
+  addRect(S, -7.5, -1.3, -9.6, 15, 0, 0, 0, 5.2, 0, 0, 0, 1, (x, y, z) => {
+    const n = fbm(x * 0.6, y * 0.6, 3); mat(0.24 + n * 0.06, 0.19 + n * 0.05, 0.15 + n * 0.04);
+  }, { blur: 3.2, skip: winSkip, alpha: 1 });
+  // night window: blurred city
+  addRect(S, 2.4, -0.75, -9.65, 3.2, 0, 0, 0, 2.55, 0, 0, 0, 1, (x, y, z) => {
+    const t = (y + 0.75) / 2.55; mat(0.035 + 0.03 * t, 0.05 + 0.035 * t, 0.1 + 0.07 * t);
+  }, { emissive: true, blur: 3.5, alpha: 1 });
+  for (let i = 0; i < 150; i++){
+    const x = mix(2.5, 5.5, rnd()), y = mix(-0.7, 0.6, Math.pow(rnd(), 1.6)), k = rnd();
+    const col = k < 0.55 ? [1, 0.62, 0.25] : k < 0.8 ? [1, 0.92, 0.8] : [0.5, 0.75, 1];
+    const s = 0.03 + rnd() * 0.07;
+    S.iso(x, y, -9.55, s, col[0], col[1], col[2], 0.18 + rnd() * 0.35, 0);
+  }
+  addRect(S, 3.97, -0.75, -9.6, 0.06, 0, 0, 0, 2.55, 0, 0, 0, 1, () => mat(0.02, 0.018, 0.016), { emissive: true, blur: 2.5, alpha: 1 });
+  addRect(S, 2.4, 0.5, -9.6, 3.2, 0, 0, 0, 0.06, 0, 0, 0, 1, () => mat(0.02, 0.018, 0.016), { emissive: true, blur: 2.5, alpha: 1 });
+  // string lights across the wall: out-of-focus bokeh
+  for (const [y0, sag, x0, x1] of [[0.85, 0.4, -7, 2.2], [0.45, 0.3, -6, 1.6]]){
+    for (let x = x0; x < x1; x += 0.36 + rnd() * 0.08){
+      const t = (x - x0) / (x1 - x0), y = y0 - sag * 4 * t * (1 - t);
+      const s = 0.07 + rnd() * 0.03, b = 0.75 + rnd() * 0.25;
+      S.iso(x, y, -9.45, s, b, 0.68 * b, 0.36 * b, 0.42, 0);
+      S.iso(x, y, -9.45, s * 2.6, 1, 0.6, 0.3, 0.05, 0);
+    }
+  }
+
+  // pendant lamp over the table (shade cut off by the top of the window)
+  const lampX = 0.15, lampZ = -3.1, lampY = 0.6;
+  addLathe(S, lampX, lampY, lampZ, [[0.34, 0], [0.32, 0.05], [0.24, 0.15], [0.1, 0.24], [0.035, 0.27]], blackMetal, { dens: 1.1 });
+  addLathe(S, lampX, lampY + 0.004, lampZ, [[0.325, 0], [0.305, 0.05], [0.23, 0.15], [0.09, 0.24]], (x, y) => { const k = 1 - y * 2.2; mat(1.0 * k + 0.1, 0.72 * k + 0.06, 0.38 * k + 0.03); }, { emissive: true, inside: true, dens: 1.1 });
+  addCyl(S, lampX, lampY + 0.27, lampZ, lampX, 3.5, lampZ, 0.006, () => mat(0.02, 0.02, 0.02), { emissive: true });
+  for (let i = 0; i < 260; i++){ const a = rnd() * TAU, r = 0.05 * Math.sqrt(rnd()); S.iso(lampX + Math.cos(a) * r, lampY + 0.07 + rnd() * 0.04, lampZ + Math.sin(a) * r, 0.012, 1, 0.92, 0.75, 0.9, 0); }
+  S.iso(lampX, lampY + 0.06, lampZ, 0.13, 1, 0.75, 0.45, 0.32, 0);
+  S.iso(lampX, lampY + 0.02, lampZ, 0.4, 1, 0.7, 0.4, 0.06, 0);
+
+  // ---- cutting board, top-left
+  const bx0 = -1.45, bx1 = -0.1, bz0 = -3.0, bz1 = -2.22, bt = 0.05, BY = TY + bt;
+  addRect(S, bx0, BY, bz1, 0, 0, bz0 - bz1, bx1 - bx0, 0, 0, 0, 1, 0, oak, { dens: 1.3 });
+  addRect(S, bx0, TY, bz1, bx1 - bx0, 0, 0, 0, bt, 0, 0, 0, 1, (x, y, z) => { oak(x, y, z * 3); AR *= 0.8; AG *= 0.8; AB *= 0.8; }, { dens: 1.5 });
+  addRect(S, bx1, TY, bz1, 0, 0, bz0 - bz1, 0, bt, 0, 1, 0, 0, (x, y, z) => { oak(x, y, z); AR *= 0.75; AG *= 0.75; AB *= 0.75; }, { dens: 1.5 });
+  addRect(S, bx0, TY, bz0, 0, 0, bz1 - bz0, 0, bt, 0, -1, 0, 0, oak, { dens: 1.5 });
+
+  // tomatoes: two halves cut face up and one whole
+  const tomatoCut = (seed) => (x, y, z, ang, h, r, seg) => {
+    if (seg === 7){
+      const R = 0.075, rr = r / R;
+      if (rr > 0.9) return mat(0.75, 0.1, 0.06, 0.3, 30);
+      if (rr < 0.26) return mat(0.95, 0.5, 0.38, 0.4, 40);
+      const septa = Math.abs(Math.sin(ang * 1.5 + seed));
+      if (septa < 0.16) return mat(0.85, 0.2, 0.12, 0.4, 40);
+      const seedDot = h2(Math.floor(x * 400), Math.floor(z * 400)) > 0.86;
+      return seedDot ? mat(0.95, 0.85, 0.45, 0.6, 50) : mat(0.95, 0.5, 0.18, 0.7, 60);
+    }
+    mat(0.72, 0.07, 0.04, 0.8, 55);
+  };
+  addLathe(S, -1.08, BY, -2.5, hemiUp(0.075, 7), tomatoCut(0.4), { dens: 2 });
+  addLathe(S, -0.88, BY, -2.78, hemiUp(0.075, 7), tomatoCut(1.9), { dens: 2 });
+  addLathe(S, -1.3, BY, -2.82, sphere(0.085, 12), () => mat(0.68, 0.06, 0.035, 0.85, 55), { dens: 2, sy: 0.86 });
+  for (let i = 0; i < 6; i++){ const a = i / 6 * TAU + 0.3; S.add(-1.3 + Math.cos(a) * 0.025, BY + 0.148, -2.82 + Math.sin(a) * 0.025, Math.cos(a), 0.15, Math.sin(a), 0.022, -Math.sin(a), 0, Math.cos(a), 0.007, 0, 1, 0, 0.003, 0.12, 0.3, 0.08, 0.95, 0); }
+
+  // basil leaves
+  const leaf = (cx, cy, cz, yaw, len, wid) => {
+    const A = [Math.cos(yaw), 0, Math.sin(yaw)], B = [-Math.sin(yaw), 0, Math.cos(yaw)];
+    for (let u = 0; u <= 1; u += 0.03){
+      const w = wid * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.05)), 0.75);
+      for (let v = -1; v <= 1; v += 0.12){
+        const px = cx + A[0] * (u - 0.5) * len + B[0] * v * w, pz = cz + A[2] * (u - 0.5) * len + B[2] * v * w;
+        const py = cy + 0.004 + v * v * w * 0.35;
+        const vein = Math.abs(v) < 0.1 || Math.abs(Math.sin((u * 7 - Math.abs(v) * 1.5) * Math.PI)) < 0.12;
+        mat(vein ? 0.2 : 0.07, vein ? 0.42 : 0.3, vein ? 0.12 : 0.06, 0.5, 30); shade(px, py, pz, B[0] * -v * 0.4, 1, B[2] * -v * 0.4, 1);
+        S.add(px, py, pz, A[0], 0, A[2], len * 0.022, B[0], 0, B[2], Math.max(0.004, w * 0.09), 0, 1, 0, 0.001, OR, OG, OB, 0.97, OF);
+      }
+    }
+  };
+  leaf(-0.62, BY, -2.4, 0.4, 0.15, 0.045); leaf(-0.48, BY, -2.5, -0.6, 0.13, 0.04); leaf(-1.25, BY, -2.4, 2.4, 0.12, 0.036); leaf(-0.35, TY, -1.95, 1.2, 0.13, 0.04);
+  // chopped scallion
+  for (let i = 0; i < 160; i++){
+    const a = rnd() * TAU, r = 0.09 * Math.sqrt(rnd()), x = -0.45 + Math.cos(a) * r * 1.4, z = -2.72 + Math.sin(a) * r, ax = randAxes();
+    const pale = rnd() < 0.3; mat(pale ? 0.65 : 0.22, pale ? 0.72 : 0.5, pale ? 0.45 : 0.12, 0.5, 30); shade(x, BY + 0.006, z, 0, 1, 0, 1);
+    S.add(x, BY + 0.006, z, ax[0], ax[1], ax[2], 0.009, ax[3], ax[4], ax[5], 0.008, ax[6], ax[7], ax[8], 0.003, OR, OG, OB, 0.97, OF);
+  }
+  // chef's knife
+  { const [A, B, C] = yawAxes(-0.32), cB = [-0.72, BY + 0.004, -2.66];
+    addOBox(S, cB, A, B, C, 0.19, 0.032, 0.002, "+C +B -B", (x, y, z) => { const edge = vnoise(x * 30, z * 30); mat(0.62 + edge * 0.1, 0.64 + edge * 0.1, 0.68 + edge * 0.1, 1.3, 70); }, { dens: 2.2 });
+    const hc = [cB[0] - A[0] * 0.29, BY + 0.012, cB[2] - A[2] * 0.29];
+    addOBox(S, hc, A, B, C, 0.1, 0.017, 0.011, "+C +B -B -A", (x, y, z) => mat(0.07, 0.045, 0.03, 0.4, 30), { dens: 2.2 });
+    for (const k of [-0.05, 0.03]) S.iso(hc[0] + A[0] * k, BY + 0.024, hc[2] + A[2] * k, 0.004, 0.85, 0.82, 0.75, 0.95, 0);
+  }
+
+  // ---- the drink (hero): rocks glass on a linen napkin, ice, lime wheel
+  const gx = 0.12, gz = -2.12;
+  { const [A, B, C] = yawAxes(0.18);
+    addOBox(S, [gx, TY + 0.002, gz], A, B, C, 0.29, 0.27, 0.001, "+C", (x, y, z, u, v) => {
+      const weave = (Math.sin(u * 900) * Math.sin(v * 900)) * 0.03, fold = Math.abs(u - 0.29) < 0.006 ? -0.12 : 0;
+      mat(0.8 + weave + fold, 0.77 + weave + fold, 0.71 + weave + fold, 0.05, 10);
+    }, { dens: 1.4 });
+  }
+  const GR = 0.15, GH = 0.31, GY = TY + 0.004;
+  // liquid
+  addLathe(S, gx, GY, gz, [[0.128, 0.035], [0.128, 0.17]], (x, y, z, ang, h) => { const k = 0.6 + h * 2.2; mat(0.8 * k, 0.36 * k, 0.07 * k, 0.6, 40); }, { inside: true, alpha: 0.8, dens: 1.6 });
+  addLathe(S, gx, GY, gz, [[0.128, 0.17], [0, 0.17]], (x, y, z, ang, h, r) => mat(0.95, 0.52, 0.14, 1.0, 50), { alpha: 0.75, dens: 1.6 });
+  // ice
+  for (const [ox, oz, yaw, h] of [[-0.04, -0.03, 0.3, 0.19], [0.05, 0.02, 1.1, 0.2], [-0.01, 0.06, 0.7, 0.155]]){
+    const ax = yawAxes(yaw), tilt = 0.25;
+    const C = [Math.sin(tilt) * ax[1][0], Math.cos(tilt), Math.sin(tilt) * ax[1][2]], B = [ax[1][0] * Math.cos(tilt), -Math.sin(tilt), ax[1][2] * Math.cos(tilt)];
+    addOBox(S, [gx + ox, GY + h, gz + oz], ax[0], B, C, 0.04, 0.04, 0.038, "+C +B -B +A -A", () => mat(0.75, 0.86, 0.95, 1.4, 80), { dens: 1.8, alpha: 0.38 });
+  }
+  // glass: faint walls, bright rim and base; the grazing edges thicken on their own like real fresnel
+  const glassMat = (x, y, z, ang) => mat(0.55, 0.62, 0.66, 1.6, 90, streak(ang) * 0.2);
+  addLathe(S, gx, GY, gz, [[GR - 0.004, 0], [GR, 0.01], [GR, GH]], glassMat, { alpha: 0.05, specAlpha: 1.4, dens: 1.5 });
+  addLathe(S, gx, GY, gz, [[GR - 0.012, GH], [GR - 0.012, 0.035]], glassMat, { alpha: 0.04, specAlpha: 1.0, inside: true, dens: 1.3 });
+  addLathe(S, gx, GY, gz, [[GR, GH], [GR - 0.012, GH]], () => mat(0.9, 0.92, 0.95, 1.2, 60), { alpha: 0.55, dens: 2.2 });
+  addLathe(S, gx, GY, gz, [[GR - 0.012, 0.035], [0, 0.035]], () => mat(0.9, 0.75, 0.55, 0.8, 50), { alpha: 0.22, dens: 1.5 });
+  for (let i = 0; i < 45; i++){ const a = mix(-0.4, 3.5, rnd()) + Math.PI * 0.5, h = mix(0.02, 0.24, rnd()); S.iso(gx + Math.cos(a) * (GR + 0.002), GY + h, gz + Math.sin(a) * (GR + 0.002), 0.0018 + rnd() * 0.0015, 0.95, 0.9, 0.85, 0.4, 0); }
+  // lime wheel perched on the rim
+  { const cx = gx + 0.13, cy = GY + GH - 0.035, cz = gz + 0.05, R = 0.068, yaw = 0.5;
+    const A = [Math.cos(yaw), 0, Math.sin(yaw)], N = [-Math.sin(yaw) * 0.3, 0.4, Math.cos(yaw)], nl = Math.hypot(N[0], N[1], N[2]); N[0] /= nl; N[1] /= nl; N[2] /= nl;
+    const B = [N[1] * A[2] - N[2] * A[1], N[2] * A[0] - N[0] * A[2], N[0] * A[1] - N[1] * A[0]];
+    for (let r = 0.003; r < R; r += 0.0045){
+      const nA = Math.max(6, Math.ceil(TAU * r / 0.0045));
+      for (let k = 0; k < nA; k++){
+        const a = (k + rnd()) / nA * TAU, ca = Math.cos(a), sa = Math.sin(a), rr = r / R;
+        const px = cx + (A[0] * ca + B[0] * sa) * r, py = cy + (A[1] * ca + B[1] * sa) * r, pz = cz + (A[2] * ca + B[2] * sa) * r;
+        const seg = (a / TAU * 10) % 1;
+        if (rr > 0.93) mat(0.12, 0.3, 0.05, 0.5, 40); else if (rr > 0.84) mat(0.85, 0.88, 0.68, 0.3, 30);
+        else if (seg < 0.07 || seg > 0.93 || rr < 0.08) mat(0.8, 0.86, 0.6, 0.4, 30); else mat(0.48 + rnd() * 0.08, 0.72, 0.18, 0.9, 50);
+        EM = 0.12; shade(px, py, pz, N[0], N[1], N[2], 1); OR = Math.min(1, OR + AR * 0.22); OG = Math.min(1, OG + AG * 0.22); OB = Math.min(1, OB + AB * 0.12);
+        S.add(px, py, pz, -sa * A[0] + ca * B[0], -sa * A[1] + ca * B[1], -sa * A[2] + ca * B[2], 0.0035, ca * A[0] + sa * B[0], ca * A[1] + sa * B[1], ca * A[2] + sa * B[2], 0.0028, N[0], N[1], N[2], 0.001, OR, OG, OB, 0.95, OF);
+      }
+    }
+  }
+  // jigger, lime halves
+  addLathe(S, 0.6, TY, -1.88, [[0.028, 0], [0.034, 0.004], [0.018, 0.055], [0.04, 0.115], [0.042, 0.118]], steel(0.55), { dens: 2 });
+  const limeFace = (x, y, z, ang, h, r, seg) => {
+    if (seg === 7){ const rr = r / 0.058, sg = (ang / TAU * 10 + 10) % 1;
+      if (rr > 0.94) return mat(0.12, 0.3, 0.05, 0.5, 40); if (rr > 0.85) return mat(0.85, 0.88, 0.68, 0.3, 30);
+      if (sg < 0.07 || sg > 0.93 || rr < 0.1) return mat(0.8, 0.86, 0.6, 0.4, 30); return mat(0.5, 0.74, 0.18, 0.9, 55); }
+    const d = vnoise(x * 300, z * 300 + y * 300); mat(0.1 + d * 0.04, 0.3 + d * 0.06, 0.05, 0.6, 35);
+  };
+  addLathe(S, 0.62, TY, -2.55, hemiUp(0.058, 7), limeFace, { dens: 2 });
+  addLathe(S, 0.78, TY, -2.42, dome(0.058, 7), (x, y, z) => { const d = vnoise(x * 300, z * 300 + y * 300); mat(0.1 + d * 0.04, 0.3 + d * 0.06, 0.05, 0.6, 35); }, { dens: 2 });
+
+  // shaker and bottle
+  addLathe(S, 1.42, TY, -2.75, [[0.07, 0], [0.082, 0.015], [0.088, 0.24], [0.072, 0.29], [0.052, 0.35], [0.042, 0.37], [0.046, 0.41], [0.03, 0.43], [0, 0.435]], steel(0.5), { dens: 1.6 });
+  addLathe(S, -0.42, TY, -4.35, [[0.11, 0], [0.115, 0.02], [0.115, 0.5], [0.1, 0.58], [0.05, 0.66], [0.034, 0.7], [0.034, 0.86], [0.042, 0.875], [0.042, 0.92], [0, 0.925]], (x, y, z, ang, h) => {
+    const front = Math.sin(ang) > -0.1;
+    if (front && h > 0.14 && h < 0.38){
+      const stripe = (h > 0.3 && h < 0.33) || (h > 0.19 && h < 0.2) ? 0.35 : 1, ink = h > 0.22 && h < 0.29 && vnoise(ang * 30, h * 60) > 0.55 ? 0.35 : 1;
+      return mat(0.82 * stripe * ink, 0.76 * stripe * ink, 0.62 * stripe * ink, 0.15, 20);
+    }
+    if (h > 0.86) return mat(0.5, 0.12, 0.1, 0.6, 40);     // wax seal
+    mat(0.2, 0.1, 0.035, 1.5, 80, streak(ang) * 0.35);
+  }, { dens: 1.3, alpha: 0.95 });
+
+  // ---- pan of vegetables on a cork trivet, back right, with steam
+  const px0 = 0.95, pz0 = -3.85;
+  addLathe(S, px0, TY, pz0, [[0.48, 0], [0.48, 0.016], [0, 0.016]], (x, y, z) => { const n = h2(Math.floor(x * 250), Math.floor(z * 250)); mat(0.5 + n * 0.15, 0.36 + n * 0.1, 0.22 + n * 0.06, 0.05, 10); }, { dens: 1.2 });
+  const PY = TY + 0.016;
+  addLathe(S, px0, PY, pz0, [[0.36, 0], [0.4, 0.02], [0.43, 0.12], [0.438, 0.128]], blackMetal, { dens: 1.15 });
+  addLathe(S, px0, PY, pz0, [[0.432, 0.128], [0.405, 0.03]], () => mat(0.05, 0.05, 0.055, 0.6, 30), { inside: true, dens: 1.15 });
+  { const hd = [0.78, 0.13, -0.6], hl = Math.hypot(hd[0], hd[1], hd[2]); hd[0] /= hl; hd[1] /= hl; hd[2] /= hl;
+    const a0 = [px0 + hd[0] * 0.43, PY + 0.11, pz0 + hd[2] * 0.43];
+    addCyl(S, a0[0], a0[1], a0[2], a0[0] + hd[0] * 0.55, a0[1] + hd[1] * 0.55, a0[2] + hd[2] * 0.55, 0.022, blackMetal, { dens: 1.3 }); }
+  const veg = [[0.72, 0.1, 0.05], [0.88, 0.62, 0.08], [0.22, 0.46, 0.1], [0.82, 0.7, 0.5], [0.45, 0.22, 0.08], [0.6, 0.08, 0.04]];
+  for (let i = 0; i < 2600; i++){
+    const a = rnd() * TAU, r = 0.38 * Math.sqrt(rnd()), x = px0 + Math.cos(a) * r, z = pz0 + Math.sin(a) * r, y = PY + 0.03 + (1 - r / 0.38) * 0.025 + rnd() * 0.012;
+    const c = veg[(rnd() * veg.length) | 0], ax = randAxes(), sz = 0.008 + rnd() * 0.012;
+    mat(c[0], c[1], c[2], 0.7, 45); shade(x, y, z, ax[6] * 0.4, 1, ax[8] * 0.4, 0.85);
+    S.add(x, y, z, ax[0], ax[1], ax[2], sz, ax[3], ax[4], ax[5], sz * 0.6, ax[6], ax[7], ax[8], sz * 0.35, OR, OG, OB, 0.98, OF);
+  }
+  for (let i = 0; i < 420; i++){ const a = rnd() * TAU, r = 0.3 * Math.sqrt(rnd());
+    S.iso(px0 + Math.cos(a) * r, PY + 0.05, pz0 + Math.sin(a) * r, 0.018 + rnd() * 0.02, 0.92, 0.86, 0.8, 0.03 + rnd() * 0.015, 3 + rnd()); }
+
+  // ---- candle in a brass dish, back left
+  const cx0 = -1.55, cz0 = -3.95;
+  addLathe(S, cx0, TY, cz0, [[0.12, 0], [0.135, 0.008], [0.14, 0.022], [0.125, 0.022], [0, 0.014]], () => mat(0.55, 0.4, 0.16, 1.2, 50), { dens: 1.5 });
+  addLathe(S, cx0, TY + 0.016, cz0, [[0.072, 0], [0.072, 0.25], [0.058, 0.256], [0, 0.262]], (x, y, z, ang, h) => { const glow = Math.max(0, h - 0.17) * 6; mat(0.9 + glow * 0.2, 0.84 + glow * 0.1, 0.7, 0.2, 20); }, { dens: 1.6 });
+  { const fy = TY + 0.016 + 0.262;
+    S.ell(cx0, fy + 0.004, cz0, 0.0015, 0.008, 0.0015, 0.05, 0.04, 0.03, 0.95, 0);
+    S.ell(cx0, fy + 0.012, cz0, 0.007, 0.012, 0.007, 0.35, 0.45, 1, 0.45, 1);
+    S.ell(cx0, fy + 0.035, cz0, 0.016, 0.04, 0.016, 1, 0.58, 0.18, 0.55, 1);
+    S.ell(cx0, fy + 0.03, cz0, 0.008, 0.024, 0.008, 1, 0.96, 0.8, 0.95, 1);
+    S.iso(cx0, fy + 0.035, cz0, 0.09, 1, 0.6, 0.25, 0.22, 1);
+    S.iso(cx0, fy + 0.03, cz0, 0.28, 1, 0.55, 0.22, 0.05, 1);
+  }
+
+  // crumbs + salt flakes near the board
+  for (let i = 0; i < 90; i++){ const x = mix(-1.7, 0.3, rnd()), z = mix(-1.5, -3.3, rnd()); if (x > -1.45 && x < -0.1 && z < -2.22 && z > -3.0) continue;
+    const salt = rnd() < 0.4; mat(salt ? 0.7 : 0.45, salt ? 0.7 : 0.3, salt ? 0.68 : 0.14, salt ? 0.4 : 0.1, 40); shade(x, TY + 0.002, z, 0, 1, 0, 1);
+    S.iso(x, TY + 0.002, z, 0.0025 + rnd() * 0.0025, OR, OG, OB, 0.95, OF); }
+  // dust motes in the lamp cone
+  for (let i = 0; i < 110; i++){ const t = rnd(), r = (0.2 + 1.1 * t) * Math.sqrt(rnd()), a = rnd() * TAU;
+    const x = lampX + Math.cos(a) * r, y = lampY - t * 1.5, z = lampZ + Math.sin(a) * r;
+    S.iso(x, y, z, 0.002 + rnd() * 0.0015, 0.9, 0.75, 0.55, 0.12 + rnd() * 0.18, 2 + rnd()); }
+  for (let i = 0; i < S.n; i++) S.d[i * STRIDE + 2] += SHIFT_Z;
+  return S;
+}
+
+/* =========================================================================
+   3. Loaders for real captures (.ply from 3DGS trainers, .splat 32-byte format)
+   ========================================================================= */
+const SH_C0 = 0.28209479177387814;
+function parsePLY(buf){
+  const u8 = new Uint8Array(buf);
+  const head = new TextDecoder().decode(u8.subarray(0, Math.min(u8.length, 65536)));
+  const end = head.indexOf("end_header");
+  if (end < 0) throw new Error("This doesn't look like a PLY file.");
+  const hlen = head.indexOf("\n", end) + 1;
+  const lines = head.slice(0, end).split(/\r?\n/);
+  if (!lines.some(l => l.startsWith("format binary_little_endian"))) throw new Error("Only binary little-endian PLY is supported.");
+  const sizes = { char: 1, uchar: 1, int8: 1, uint8: 1, short: 2, ushort: 2, int16: 2, uint16: 2, int: 4, uint: 4, int32: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
+  let n = 0, inVertex = false, off = 0; const props = {};
+  for (const l of lines){
+    const p = l.trim().split(/\s+/);
+    if (p[0] === "element"){ inVertex = p[1] === "vertex"; if (inVertex) n = parseInt(p[2], 10); }
+    else if (p[0] === "property" && inVertex){ if (p[1] === "list") throw new Error("Unsupported PLY layout."); props[p[2]] = { off, type: p[1] }; off += sizes[p[1]]; }
+  }
+  if (!props.scale_0 || !props.rot_0) throw new Error("This PLY is a mesh or point cloud, not gaussian splats (no scale/rotation data). Compressed splat PLYs aren't supported yet either.");
+  const stride = off, dv = new DataView(buf, hlen);
+  const rd = (i, name) => { const p = props[name]; const o = i * stride + p.off;
+    switch (p.type){ case "float": case "float32": return dv.getFloat32(o, true); case "double": case "float64": return dv.getFloat64(o, true);
+      case "uchar": case "uint8": return dv.getUint8(o); default: return dv.getFloat32(o, true); } };
+  const raw = newRaw(n), hasDC = !!props.f_dc_0;
+  for (let i = 0; i < n; i++){
+    let r, g, b;
+    if (hasDC){ r = 0.5 + SH_C0 * rd(i, "f_dc_0"); g = 0.5 + SH_C0 * rd(i, "f_dc_1"); b = 0.5 + SH_C0 * rd(i, "f_dc_2"); }
+    else { r = rd(i, "red") / 255; g = rd(i, "green") / 255; b = rd(i, "blue") / 255; }
+    const a = props.opacity ? 1 / (1 + Math.exp(-rd(i, "opacity"))) : 1;
+    putRaw(raw, i, rd(i, "x"), rd(i, "y"), rd(i, "z"), Math.exp(rd(i, "scale_0")), Math.exp(rd(i, "scale_1")), Math.exp(rd(i, "scale_2")),
+      rd(i, "rot_0"), rd(i, "rot_1"), rd(i, "rot_2"), rd(i, "rot_3"), r, g, b, a);
+  }
+  return raw;
+}
+function parseSplat(buf){
+  const n = Math.floor(buf.byteLength / 32), f = new Float32Array(buf, 0, n * 8), u = new Uint8Array(buf), raw = newRaw(n);
+  for (let i = 0; i < n; i++){
+    const o = i * 8, b = i * 32;
+    putRaw(raw, i, f[o], f[o + 1], f[o + 2], f[o + 3], f[o + 4], f[o + 5],
+      (u[b + 28] - 128) / 128, (u[b + 29] - 128) / 128, (u[b + 30] - 128) / 128, (u[b + 31] - 128) / 128,
+      u[b + 24] / 255, u[b + 25] / 255, u[b + 26] / 255, u[b + 27] / 255);
+  }
+  return raw;
+}
+function newRaw(n){ return { n, pos: new Float32Array(n * 3), cov: new Float32Array(n * 6), col: new Float32Array(n * 4) }; }
+function putRaw(R, i, x, y, z, sx, sy, sz, qw, qx, qy, qz, r, g, b, a){
+  const ql = Math.hypot(qw, qx, qy, qz) || 1; qw /= ql; qx /= ql; qy /= ql; qz /= ql;
+  const m00 = 1 - 2 * (qy * qy + qz * qz), m01 = 2 * (qx * qy - qw * qz), m02 = 2 * (qx * qz + qw * qy);
+  const m10 = 2 * (qx * qy + qw * qz), m11 = 1 - 2 * (qx * qx + qz * qz), m12 = 2 * (qy * qz - qw * qx);
+  const m20 = 2 * (qx * qz - qw * qy), m21 = 2 * (qy * qz + qw * qx), m22 = 1 - 2 * (qx * qx + qy * qy);
+  const a0 = m00 * sx, a1 = m01 * sy, a2 = m02 * sz, b0 = m10 * sx, b1 = m11 * sy, b2 = m12 * sz, c0 = m20 * sx, c1 = m21 * sy, c2 = m22 * sz;
+  const p = i * 3, c = i * 6, k = i * 4;
+  R.pos[p] = x; R.pos[p + 1] = y; R.pos[p + 2] = z;
+  R.cov[c] = a0 * a0 + a1 * a1 + a2 * a2; R.cov[c + 1] = a0 * b0 + a1 * b1 + a2 * b2; R.cov[c + 2] = a0 * c0 + a1 * c1 + a2 * c2;
+  R.cov[c + 3] = b0 * b0 + b1 * b1 + b2 * b2; R.cov[c + 4] = b0 * c0 + b1 * c1 + b2 * c2; R.cov[c + 5] = c0 * c0 + c1 * c1 + c2 * c2;
+  R.col[k] = clamp(r, 0, 1); R.col[k + 1] = clamp(g, 0, 1); R.col[k + 2] = clamp(b, 0, 1); R.col[k + 3] = clamp(a, 0, 1);
+}
+const rotX = (a) => [1, 0, 0, 0, Math.cos(a), -Math.sin(a), 0, Math.sin(a), Math.cos(a)];
+const rotY = (a) => [Math.cos(a), 0, Math.sin(a), 0, 1, 0, -Math.sin(a), 0, Math.cos(a)];
+const mul3 = (A, B) => { const C = new Array(9); for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) C[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c]; return C; };
+let capture = null;
+function prepCapture(raw){
+  const n = raw.n, step = Math.max(1, Math.floor(n / 20000)), xs = [], ys = [], zs = [];
+  for (let i = 0; i < n; i += step){ if (raw.col[i * 4 + 3] < 0.2) continue; xs.push(raw.pos[i * 3]); ys.push(raw.pos[i * 3 + 1]); zs.push(raw.pos[i * 3 + 2]); }
+  const med = (a) => { const s = a.slice().sort((p, q) => p - q); return s[s.length >> 1] || 0; };
+  const center = [med(xs), med(ys), med(zs)];
+  const ds = xs.map((x, i) => Math.hypot(x - center[0], ys[i] - center[1], zs[i] - center[2])).sort((p, q) => p - q);
+  capture = { raw, rot: rotX(Math.PI), dist: 1, center, radius: ds[Math.floor(ds.length * 0.7)] || 1 };
+  rebuildCapture();
+}
+function rebuildCapture(){
+  const { raw, rot: Rm, center, radius } = capture, n = raw.n;
+  const S = new Splats(n), k = 2.3 / radius, k2 = k * k, back = -(2.3 * 1.15 + 0.4) * capture.dist;
+  S.n = n; const d = S.d;
+  for (let i = 0; i < n; i++){
+    const p = i * 3, c = i * 6, q = i * 4, o = i * STRIDE;
+    const x = raw.pos[p] - center[0], y = raw.pos[p + 1] - center[1], z = raw.pos[p + 2] - center[2];
+    d[o] = (Rm[0] * x + Rm[1] * y + Rm[2] * z) * k; d[o + 1] = (Rm[3] * x + Rm[4] * y + Rm[5] * z) * k; d[o + 2] = (Rm[6] * x + Rm[7] * y + Rm[8] * z) * k + back;
+    const C = raw.cov, xx = C[c], xy = C[c + 1], xz = C[c + 2], yy = C[c + 3], yz = C[c + 4], zz = C[c + 5];
+    const t00 = Rm[0] * xx + Rm[1] * xy + Rm[2] * xz, t01 = Rm[0] * xy + Rm[1] * yy + Rm[2] * yz, t02 = Rm[0] * xz + Rm[1] * yz + Rm[2] * zz;
+    const t10 = Rm[3] * xx + Rm[4] * xy + Rm[5] * xz, t11 = Rm[3] * xy + Rm[4] * yy + Rm[5] * yz, t12 = Rm[3] * xz + Rm[4] * yz + Rm[5] * zz;
+    const t20 = Rm[6] * xx + Rm[7] * xy + Rm[8] * xz, t21 = Rm[6] * xy + Rm[7] * yy + Rm[8] * yz, t22 = Rm[6] * xz + Rm[7] * yz + Rm[8] * zz;
+    d[o + 3] = k2 * (t00 * Rm[0] + t01 * Rm[1] + t02 * Rm[2]); d[o + 4] = k2 * (t00 * Rm[3] + t01 * Rm[4] + t02 * Rm[5]); d[o + 5] = k2 * (t00 * Rm[6] + t01 * Rm[7] + t02 * Rm[8]);
+    d[o + 6] = k2 * (t10 * Rm[3] + t11 * Rm[4] + t12 * Rm[5]); d[o + 7] = k2 * (t10 * Rm[6] + t11 * Rm[7] + t12 * Rm[8]);
+    d[o + 8] = k2 * (t20 * Rm[6] + t21 * Rm[7] + t22 * Rm[8]);
+    d[o + 9] = raw.col[q]; d[o + 10] = raw.col[q + 1]; d[o + 11] = raw.col[q + 2]; d[o + 12] = raw.col[q + 3]; d[o + 13] = 0;
+  }
+  setScene(S, "capture");
+}
+
+/* =========================================================================
+   4. Sorting + packing. The camera only translates (never rotates), so the
+      back-to-front order is simply world z: one sort per scene, none per frame.
+   ========================================================================= */
+const _f = new Float32Array(1), _i = new Uint32Array(_f.buffer);
+function toHalf(v){
+  _f[0] = v; const x = _i[0], s = (x >>> 16) & 0x8000; let e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+  if (e <= 0){ if (e < -10) return s; m = (m | 0x800000) >> (1 - e); return s | ((m + 0x1000) >> 13); }
+  if (e >= 31) return s | 0x7c00;
+  return s | (e << 10) | ((m + 0x1000) >> 13);
+}
+const COV_SCALE = 1000;
+function pack(S){
+  const n = S.n, d = S.d;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < n; i++){ const z = d[i * STRIDE + 2]; if (z < mn) mn = z; if (z > mx) mx = z; }
+  const B = 65536, counts = new Uint32Array(B), keys = new Uint16Array(n), sc = (B - 1) / ((mx - mn) || 1);
+  for (let i = 0; i < n; i++){ const k = ((d[i * STRIDE + 2] - mn) * sc) | 0; keys[i] = k; counts[k]++; }
+  for (let i = 1; i < B; i++) counts[i] += counts[i - 1];
+  const order = new Uint32Array(n);
+  for (let i = n - 1; i >= 0; i--) order[--counts[keys[i]]] = i;
+  const rows = Math.max(1, Math.ceil(n / 1024)), u32 = new Uint32Array(2048 * rows * 4), f32 = new Float32Array(u32.buffer);
+  for (let j = 0; j < n; j++){
+    const o = order[j] * STRIDE, t = j * 8;
+    f32[t] = d[o]; f32[t + 1] = d[o + 1]; f32[t + 2] = d[o + 2]; f32[t + 3] = d[o + 13];
+    u32[t + 4] = (toHalf(d[o + 3] * COV_SCALE) | (toHalf(d[o + 4] * COV_SCALE) << 16)) >>> 0;
+    u32[t + 5] = (toHalf(d[o + 5] * COV_SCALE) | (toHalf(d[o + 6] * COV_SCALE) << 16)) >>> 0;
+    u32[t + 6] = (toHalf(d[o + 7] * COV_SCALE) | (toHalf(d[o + 8] * COV_SCALE) << 16)) >>> 0;
+    u32[t + 7] = ((clamp(d[o + 9] * 255, 0, 255) | 0) | ((clamp(d[o + 10] * 255, 0, 255) | 0) << 8) | ((clamp(d[o + 11] * 255, 0, 255) | 0) << 16) | ((clamp(d[o + 12] * 255, 0, 255) | 0) << 24)) >>> 0;
+  }
+  return { u32, rows, n };
+}
+
+/* =========================================================================
+   5. WebGL2 renderer
+   Each quad is sized to where its gaussian actually stays visible: a faint
+   splat (alpha 0.05) only needs ~2.2 sigma instead of 3, so haze, glows and
+   glass cost far fewer pixels. That's the main fill-rate saving.
+   ========================================================================= */
+const canvas = $("gl");
+const gl = canvas.getContext("webgl2", { antialias: false, premultipliedAlpha: true, alpha: false, powerPreference: "high-performance", desynchronized: true });
+if (!gl){ $("loader").innerHTML = "This needs WebGL2.<br>Try a recent Chrome, Edge, Safari or Firefox."; return; }
+
+const VS = `#version 300 es
+precision highp float; precision highp int; precision highp usampler2D;
+uniform usampler2D u_tex;
+uniform mat4 u_proj;
+uniform vec3 u_eye;
+uniform vec2 u_focal, u_viewport;
+uniform float u_time, u_flick;
+in vec2 a_pos;
+out vec4 v_col; out vec2 v_p;
+void main(){
+  int id = gl_InstanceID;
+  ivec2 tc = ivec2((id & 1023) << 1, id >> 10);
+  uvec4 c0 = texelFetch(u_tex, tc, 0);
+  vec3 p = uintBitsToFloat(c0.xyz);
+  float w = uintBitsToFloat(c0.w);
+  float fl = 1.0, am = 1.0, cs = 1.0;
+  if (w >= 3.0) {                                   // steam: rise, drift, swell, fade
+    float s = (w - 3.0) * 6.2831853;
+    float ph = fract(u_time * 0.14 + (w - 3.0) * 7.31);
+    p += vec3(sin(u_time * 0.6 + s * 5.0) * 0.07 * ph + ph * 0.06, ph * 0.85, cos(u_time * 0.5 + s * 3.0) * 0.05 * ph);
+    cs = 1.0 + ph * 2.2;
+    am = smoothstep(0.0, 0.12, ph) * (1.0 - ph);
+  } else if (w >= 2.0) {                            // dust: slow drift and twinkle
+    float s = (w - 2.0) * 6.2831853;
+    p += vec3(sin(u_time * 0.17 + s * 7.0) * 0.06, sin(u_time * 0.12 + s * 11.0) * 0.05, cos(u_time * 0.15 + s * 5.0) * 0.06);
+    am = 0.55 + 0.45 * sin(u_time * 1.1 + s * 17.0);
+  } else {
+    fl = 1.0 - w + w * u_flick;                     // candle-lit share flickers
+  }
+  uvec4 c1 = texelFetch(u_tex, tc + ivec2(1, 0), 0);
+  float alpha = float(c1.w >> 24) / 255.0 * am;
+  vec3 cam = p - u_eye;                             // the view never rotates: camera space is a translation
+  vec4 clip = u_proj * vec4(cam, 1.0);
+  if (cam.z > -0.03 || alpha < 0.004 || abs(clip.x) > 1.2 * clip.w || abs(clip.y) > 1.2 * clip.w) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  vec2 h1 = unpackHalf2x16(c1.x), h2 = unpackHalf2x16(c1.y), h3 = unpackHalf2x16(c1.z);
+  mat3 V = mat3(h1.x, h1.y, h2.x,  h1.y, h2.y, h3.x,  h2.x, h3.x, h3.y) * (${(1 / COV_SCALE).toFixed(6)} * cs * cs);
+  float iz = 1.0 / cam.z;
+  mat3 J = mat3(-u_focal.x * iz, 0.0, 0.0,
+                0.0, -u_focal.y * iz, 0.0,
+                u_focal.x * cam.x * iz * iz, u_focal.y * cam.y * iz * iz, 0.0);
+  mat3 C = J * V * transpose(J);
+  float a = C[0][0] + 0.3, b = C[0][1], d = C[1][1] + 0.3;
+  float mid = 0.5 * (a + d), rad = length(vec2(0.5 * (a - d), b));
+  float l1 = mid + rad, l2 = max(mid - rad, 0.09);
+  vec2 e1 = abs(b) < 1e-7 ? (a >= d ? vec2(1.0, 0.0) : vec2(0.0, 1.0)) : normalize(vec2(b, l1 - a));
+  vec2 e2 = vec2(-e1.y, e1.x);
+  float ext = min(3.0, sqrt(2.0 * log(alpha * 255.0)));          // how far out this splat is still visible
+  float r1 = min(sqrt(l1), 600.0) * ext, r2 = min(sqrt(l2), 600.0) * ext;
+  vec2 ndc = clip.xy / clip.w;
+  gl_Position = vec4(ndc + (a_pos.x * r1 * e1 + a_pos.y * r2 * e2) * 2.0 / u_viewport, 0.0, 1.0);
+  vec3 col = vec3(float(c1.w & 255u), float((c1.w >> 8) & 255u), float((c1.w >> 16) & 255u)) / 255.0;
+  v_col = vec4(col * fl, alpha);
+  v_p = a_pos * ext;
+}`;
+const FS = `#version 300 es
+precision mediump float;
+in vec4 v_col; in vec2 v_p;
+out vec4 o;
+void main(){
+  float a = min(0.995, exp(-0.5 * dot(v_p, v_p)) * v_col.a);
+  if (a < 0.004) discard;
+  o = vec4(v_col.rgb * a, a);
+}`;
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U = {}; for (const n of ["u_tex", "u_proj", "u_eye", "u_focal", "u_viewport", "u_time", "u_flick"]) U[n] = gl.getUniformLocation(prog, n);
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, "a_pos"); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.uniform1i(U.u_tex, 0);
+gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+let drawCount = 0, table = null, sceneKind = "table";
+function setScene(S, kind){
+  const P = pack(S);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, 2048, P.rows, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, P.u32);
+  drawCount = P.n; sceneKind = kind;
+  $("count").textContent = P.n.toLocaleString("en-US");
+  $("captureTools").hidden = kind !== "capture";
+  $("word").textContent = kind === "capture" ? "Captured" : "Evening";
+}
+
+// Render resolution never drops. "4K" renders at least 2160 px tall, "1080p" at least 1080 px tall,
+// or the screen's own pixel count if that's higher. Rendering above the window size and letting the
+// browser scale down acts as supersampling, which is what makes the edges clean.
+const QUALITY = { uhd: { label: "4K", minH: 2160 }, fhd: { label: "1080p", minH: 1080 } };
+let quality = "uhd";
+const MAX_DIM = Math.min(gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0], gl.getParameter(gl.MAX_VIEWPORT_DIMS)[1], gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+function resize(){
+  const cw = Math.max(1, innerWidth), ch = Math.max(1, innerHeight), devH = ch * (window.devicePixelRatio || 1);
+  let scale = Math.max(devH, QUALITY[quality].minH) / ch;
+  scale = Math.min(scale, MAX_DIM / cw, MAX_DIM / ch);
+  const w = Math.round(cw * scale), h = Math.round(ch * scale);
+  if (canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; $("res").textContent = `${w}×${h}`; }
+}
+addEventListener("resize", resize); resize();
+
+/* =========================================================================
+   6. Head position -> off-axis ("window") projection
+   Screen spans x in [-1,1], y in [-1/aspect, 1/aspect] at z = 0. Distance is
+   locked, so there is never any zoom: the head only slides across and up/down.
+   ========================================================================= */
+const SCREEN_HALF_M = 0.15, HEAD_Y0 = 0.45;
+const head = { x: 0, y: HEAD_Y0, z: EYE_Z };
+const proj = new Float32Array(16);
+function computeMatrices(){
+  const W = canvas.width, H = canvas.height, ha = H / W;
+  const hx = head.x, hy = head.y, hz = head.z, n = 0.05, f = 200;
+  const l = (-1 - hx) * n / hz, r = (1 - hx) * n / hz, b = (-ha - hy) * n / hz, t = (ha - hy) * n / hz;
+  proj.fill(0);
+  proj[0] = 2 * n / (r - l); proj[5] = 2 * n / (t - b);
+  proj[8] = (r + l) / (r - l); proj[9] = (t + b) / (t - b); proj[10] = -(f + n) / (f - n); proj[11] = -1; proj[14] = -2 * f * n / (f - n);
+  gl.uniformMatrix4fv(U.u_proj, false, proj);
+  gl.uniform3f(U.u_eye, hx, hy, hz);
+  gl.uniform2f(U.u_focal, proj[0] * W / 2, proj[5] * H / 2);
+  gl.uniform2f(U.u_viewport, W, H);
+}
+
+class OneEuro {
+  constructor(minCut = 1.0, beta = 0.6, dCut = 1.0){ this.minCut = minCut; this.beta = beta; this.dCut = dCut; this.x = null; this.dx = 0; this.t = 0; }
+  a(cut, dt){ const tau = 1 / (2 * Math.PI * cut); return 1 / (1 + tau / dt); }
+  f(x, t){
+    if (this.x === null){ this.x = x; this.t = t; return x; }
+    const dt = Math.max(1e-3, t - this.t); this.t = t;
+    const dx = (x - this.x) / dt, ad = this.a(this.dCut, dt); this.dx = this.dx + ad * (dx - this.dx);
+    const cut = this.minCut + this.beta * Math.abs(this.dx), a = this.a(cut, dt);
+    this.x = this.x + a * (x - this.x); return this.x;
+  }
+}
+// Critically damped spring with implicit integration: weighty, no overshoot, stable on slow frames.
+function springStep(s, target, dt, omega){
+  const f = 1 + 2 * dt * omega, oo = omega * omega, hoo = dt * oo, hhoo = dt * hoo, inv = 1 / (f + hhoo);
+  const nx = (f * s.x + dt * s.v + hhoo * target) * inv, nv = (s.v + hoo * (target - s.x)) * inv;
+  s.x = nx; s.v = nv;
+}
+const springX = { x: 0, v: 0 }, springY = { x: 0, v: 0 };
+
+let mode = "auto", lastPointer = -1e9, gain = 1.4;
+const pointer = { x: 0, y: 0 };
+function setMode(m){ mode = m; $("mode").textContent = m === "face" ? "head" : m; $("mdot").classList.toggle("live", m === "face"); }
+addEventListener("pointermove", (e) => {
+  if (e.target.closest && e.target.closest(".tools, .row")) return;
+  lastPointer = performance.now();
+  if (mode !== "face") setMode("pointer");
+  pointer.x = (e.clientX / innerWidth) * 2 - 1; pointer.y = (e.clientY / innerHeight) * 2 - 1;
+}, { passive: true });
+
+/* ---- webcam head tracking (MediaPipe Face Landmarker) ---- */
+const MP_VER = "0.10.14";
+const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
+const MP_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const HFOV = 62 * Math.PI / 180;
+let tracker = null, stream = null, lastVideoT = -1, face = null, calib = null, lostAt = 0, lastDetect = 0;
+const fx1 = new OneEuro(0.35, 0.3), fy1 = new OneEuro(0.35, 0.3);
+
+async function startTracking(){
+  const btn = $("track");
+  if (tracker){ stopTracking(); return; }
+  btn.disabled = true; btn.textContent = "Starting camera…";
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("no-media"), { kind: "blocked" });
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }, audio: false }); }
+    catch (e){ throw Object.assign(new Error(e.name || "camera"), { kind: e.name === "NotAllowedError" ? "denied" : "blocked" }); }
+    const video = $("video"); video.srcObject = stream; await video.play();
+    $("cam").hidden = false; $("camlabel").textContent = "Loading face model";
+    btn.textContent = "Loading face model…";
+    let vision;
+    try { vision = await import(`${MP_BASE}/vision_bundle.mjs`); }
+    catch (e){ throw Object.assign(new Error("import"), { kind: "net" }); }
+    const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+    const opts = (delegate) => ({ baseOptions: { modelAssetPath: MP_MODEL, delegate }, runningMode: "VIDEO", numFaces: 1 });
+    try { tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("GPU")); }
+    catch (e){ tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
+    calib = null; setMode("face");
+    btn.disabled = false; btn.textContent = "Turn off head tracking";
+    $("camlabel").textContent = "Tracking";
+    toast("Head tracking is on. Sit about an arm's length away and lean around. Hit Recenter if the view feels off-centre.");
+  } catch (e){
+    stopTracking();
+    btn.disabled = false; btn.textContent = "Turn on head tracking";
+    const framed = (() => { try { return window.self !== window.top; } catch (_){ return true; } })();
+    if (e.kind === "denied" && framed) toast("This hosted page can't use the camera. Head tracking works in the downloaded copy. The pointer drives the window here.", 7000);
+    else if (e.kind === "denied") toast("Camera permission was declined. The pointer still drives the window.");
+    else if (e.kind === "net") toast("The face-tracking model couldn't load (it comes from jsDelivr and Google's model CDN). Check your connection. Pointer mode is on meanwhile.", 6500);
+    else toast("The camera isn't available on this page. Open the downloaded copy to use head tracking. Pointer works here.", 7000);
+  }
+}
+function stopTracking(){
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (tracker){ try { tracker.close(); } catch (e){} tracker = null; }
+  $("cam").hidden = true; face = null;
+  $("track").textContent = "Turn on head tracking";
+  setMode(performance.now() - lastPointer < 6000 ? "pointer" : "auto");
+}
+function pollTracker(now){
+  if (!tracker) return;
+  const video = $("video");
+  if (video.readyState < 2 || video.currentTime === lastVideoT || now - lastDetect < 32) return;
+  lastVideoT = video.currentTime; lastDetect = now;
+  let res; try { res = tracker.detectForVideo(video, now); } catch (e){ return; }
+  const lm = res && res.faceLandmarks && res.faceLandmarks[0];
+  const cv = $("camcv"), g = cv.getContext("2d"); g.clearRect(0, 0, cv.width, cv.height);
+  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "No face"; return; }
+  const vw = video.videoWidth, vh = video.videoHeight, fpx = (vw / 2) / Math.tan(HFOV / 2);
+  const L = lm[468] || lm[33], R = lm[473] || lm[263];
+  const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
+  const ipd = Math.hypot(rx - lx, ry - ly); if (ipd < 4) return;
+  const dist = 0.063 * fpx / ipd, mx = (lx + rx) / 2, my = (ly + ry) / 2, t = now / 1000;
+  face = { x: fx1.f(-(mx - vw / 2) / fpx * dist / SCREEN_HALF_M, t), y: fy1.f(-(my - vh / 2) / fpx * dist / SCREEN_HALF_M, t) };
+  if (!calib) calib = { x: face.x, y: face.y, n: 1 };
+  else if (calib.n < 20){ calib.x = mix(calib.x, face.x, 1 / (calib.n + 1)); calib.y = mix(calib.y, face.y, 1 / (calib.n + 1)); calib.n++; }
+  $("camlabel").textContent = `Tracking · ${Math.round(dist * 100)} cm`;
+  const sx = cv.width / vw, sy = cv.height / vh;
+  g.fillStyle = "#f2a654"; g.strokeStyle = "rgba(242,166,84,.6)"; g.lineWidth = 1.5;
+  for (const p of [L, R]){ g.beginPath(); g.arc(p.x * vw * sx, p.y * vh * sy, 3, 0, Math.PI * 2); g.fill(); }
+  g.beginPath(); g.moveTo(lx * sx, ly * sy); g.lineTo(rx * sx, ry * sy); g.stroke();
+  g.fillStyle = "rgba(239,232,223,.5)";
+  for (let i = 0; i < lm.length; i += 9) g.fillRect(lm[i].x * cv.width - 0.75, lm[i].y * cv.height - 0.75, 1.5, 1.5);
+}
+
+/* =========================================================================
+   7. Candle flicker and the kitchen soundscape
+   ========================================================================= */
+let flick = 1;
+function updateFlicker(t){
+  if (reduceMotion){ flick = 1; return; }
+  const gust = Math.max(0, Math.sin(t * 0.37) * Math.sin(t * 0.91 + 1.3));
+  flick = 0.86 + 0.07 * Math.sin(t * 11.3) + 0.05 * Math.sin(t * 17.9 + 2.1) + 0.04 * Math.sin(t * 5.3 + 0.7) - gust * gust * 0.25 * (0.5 + 0.5 * Math.sin(t * 29));
+}
+let audio = null;
+function toggleSound(){
+  const b = $("sound");
+  if (audio){ audio.master.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.08); const a = audio; setTimeout(() => a.ctx.close(), 400); audio = null; b.setAttribute("aria-pressed", "false"); b.textContent = "Sound off"; return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC){ toast("Web Audio isn't available in this browser."); return; }
+  const ctx = new AC(), master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+  // sizzle: hiss plus random oil pops, baked into a looping buffer
+  const len = ctx.sampleRate * 6, buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++){
+    const ch = buf.getChannelData(c); let env = 0;
+    for (let i = 0; i < len; i++){
+      if (Math.random() < 0.0009) env = 0.5 + Math.random() * 0.8;
+      env *= 0.9985;
+      ch[i] = (Math.random() * 2 - 1) * (0.16 + env * (Math.random() < 0.3 ? 1 : 0.2));
+    }
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2400;
+  const pk = ctx.createBiquadFilter(); pk.type = "peaking"; pk.frequency.value = 6000; pk.gain.value = 4;
+  const sg = ctx.createGain(); sg.gain.value = 0.22; src.connect(hp); hp.connect(pk); pk.connect(sg); sg.connect(master); src.start();
+  // room tone
+  const rl = ctx.sampleRate * 3, rb = ctx.createBuffer(1, rl, ctx.sampleRate), rc = rb.getChannelData(0); let last = 0;
+  for (let i = 0; i < rl; i++){ last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; rc[i] = last * 3; }
+  const rs = ctx.createBufferSource(); rs.buffer = rb; rs.loop = true; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380;
+  const rg = ctx.createGain(); rg.gain.value = 0.25; rs.connect(lp); lp.connect(rg); rg.connect(master); rs.start();
+  master.gain.setTargetAtTime(0.55, ctx.currentTime, 0.5);
+  audio = { ctx, master };
+  b.setAttribute("aria-pressed", "true"); b.textContent = "Sound on";
+}
+
+/* =========================================================================
+   8. Frame loop
+   ========================================================================= */
+let last = performance.now(), fpsEma = 60, fpsT = 0, frozen = null;
+function frame(now){
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; const t = now / 1000;
+  fpsEma = mix(fpsEma, 1 / Math.max(dt, 1e-3), 0.05);
+  if (now - fpsT > 500){ $("fps").textContent = Math.round(fpsEma); fpsT = now; }
+  pollTracker(now);
+  let tx = 0, ty = 0;
+  if (mode === "face"){
+    if (face && calib){ tx = (face.x - calib.x) * gain; ty = (face.y - calib.y) * gain; }
+    else if (now - lostAt < 900){ tx = springX.x; ty = springY.x; }
+  } else {
+    if (mode === "pointer" && now - lastPointer > 6000) setMode("auto");
+    if (mode === "pointer"){ tx = pointer.x * 1.1 * gain; ty = -pointer.y * 0.6 * gain; }
+    else { const k = reduceMotion ? 0.3 : 1; tx = Math.sin(t * 0.19) * 0.9 * k; ty = Math.sin(t * 0.27 + 1) * 0.28 * k; }
+  }
+  tx = 1.6 * Math.tanh(tx / 1.6); ty = 0.85 * Math.tanh(ty / 0.85);       // soft limits: ease into the edges
+  if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springX.v = springY.v = 0; }
+  const omega = mode === "face" ? 6.5 : mode === "pointer" ? 4.5 : 2.5;
+  springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega);
+  head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z;
+  updateFlicker(t);
+
+  resize();
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0.03, 0.024, 0.02, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (drawCount){
+    computeMatrices();
+    gl.uniform1f(U.u_time, reduceMotion ? 0 : t); gl.uniform1f(U.u_flick, sceneKind === "table" ? flick : 1);
+    gl.bindVertexArray(vao);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCount);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =========================================================================
+   9. UI wiring
+   ========================================================================= */
+$("track").addEventListener("click", startTracking);
+$("sound").addEventListener("click", toggleSound);
+const setClean = (on) => document.body.classList.toggle("clean", on);
+$("hide").addEventListener("click", () => setClean(true));
+$("show").addEventListener("click", () => setClean(false));
+addEventListener("keydown", (e) => { if ((e.key === "h" || e.key === "H") && e.target.tagName !== "INPUT") setClean(!document.body.classList.contains("clean")); });
+$("gain").addEventListener("input", (e) => { gain = parseFloat(e.target.value); $("gainv").textContent = gain.toFixed(2); });
+$("quality").addEventListener("click", () => {
+  quality = quality === "uhd" ? "fhd" : "uhd";
+  $("quality").textContent = "Render: " + QUALITY[quality].label;
+  resize();
+});
+$("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
+
+async function loadBuffer(buf, name){
+  $("loader").classList.remove("done"); $("loader").innerHTML = "Reading capture<br>" + name;
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const raw = /\.splat$/i.test(name) ? parseSplat(buf) : parsePLY(buf);
+    if (!raw.n) throw new Error("The file has no splats in it.");
+    prepCapture(raw);
+    toast(`Loaded ${raw.n.toLocaleString("en-US")} splats. If it's upside down or sideways, use Flip, Turn or Tilt.`, 6000);
+  } catch (e){ toast(e.message || "Couldn't read that file.", 7000); }
+  $("loader").classList.add("done");
+}
+$("file").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; await loadBuffer(await f.arrayBuffer(), f.name); e.target.value = ""; });
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("drop").classList.add("on"); });
+addEventListener("dragleave", () => { if (--dragDepth <= 0){ dragDepth = 0; $("drop").classList.remove("on"); } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", async (e) => { e.preventDefault(); dragDepth = 0; $("drop").classList.remove("on"); const f = e.dataTransfer.files[0]; if (f) await loadBuffer(await f.arrayBuffer(), f.name); });
+
+const SAMPLE_URL = "https://huggingface.co/cakewalk/splat-data/resolve/main/train.splat";
+$("sample").addEventListener("click", async () => {
+  const b = $("sample"); b.disabled = true;
+  try {
+    const res = await fetch(SAMPLE_URL, { mode: "cors" });
+    if (!res.ok) throw new Error(res.status);
+    const total = +res.headers.get("content-length") || 0, reader = res.body.getReader(), parts = []; let got = 0;
+    for (;;){ const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length; b.textContent = total ? `Downloading ${Math.round(got / total * 100)}%` : `Downloading ${(got / 1e6).toFixed(0)} MB`; }
+    const all = new Uint8Array(got); let o = 0; for (const p of parts){ all.set(p, o); o += p.length; }
+    await loadBuffer(all.buffer, "train.splat");
+  } catch (e){
+    toast("The sample capture couldn't download here (it's hosted on Hugging Face). Drop your own .ply or .splat onto the page instead.", 7000);
+  }
+  b.disabled = false; b.textContent = "Sample capture";
+});
+$("flip").addEventListener("click", () => { capture.rot = mul3(rotX(Math.PI), capture.rot); rebuildCapture(); });
+$("turn").addEventListener("click", () => { capture.rot = mul3(rotY(Math.PI / 2), capture.rot); rebuildCapture(); });
+$("tilt").addEventListener("click", () => { capture.rot = mul3(rotX(Math.PI / 2), capture.rot); rebuildCapture(); });
+let distT = 0;
+$("dist").addEventListener("input", (e) => { capture.dist = parseFloat(e.target.value); $("distv").textContent = capture.dist.toFixed(2); clearTimeout(distT); distT = setTimeout(rebuildCapture, 60); });
+$("back").addEventListener("click", () => { capture = null; setScene(table, "table"); });
+
+// test hook: freeze the head at a given offset
+window.__window = { freeze: (x, y) => { frozen = { x, y }; }, release: () => { frozen = null; }, count: () => drawCount };
+
+async function boot(){
+  await new Promise(r => setTimeout(r, 20));
+  const t0 = performance.now();
+  table = buildTable();
+  setScene(table, "table");
+  window.__window.buildMs = Math.round(performance.now() - t0);
+  $("loader").classList.add("done");
+}
+requestAnimationFrame(frame);
+boot();
+})();
+</script>
+</body></html>
