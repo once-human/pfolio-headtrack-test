@@ -269,12 +269,11 @@ function buildPhotoMesh(photoBmp, heightBmp){
     V[o + 3] = (px + 0.5) / W; V[o + 4] = (py + 0.5) / H;
   }
   // quads, skipping real depth edges; ordered low to high so soft edges blend over what's beneath
-  const CUT = 30, qa = [], qk = []; let hmax = 1;
+  const qa = [], qk = []; let hmax = 1;
   for (let gj = 0; gj < GH - 1; gj++) for (let gi = 0; gi < GW - 1; gi++){
     const a = gj * GW + gi, b = a + 1, c = a + GW, d = c + 1;
     if (idx[a] < 0 || idx[b] < 0 || idx[c] < 0 || idx[d] < 0) continue;
-    const lo = Math.min(vh[a], vh[b], vh[c], vh[d]), hi = Math.max(vh[a], vh[b], vh[c], vh[d]);
-    if (hi - lo > CUT) continue;
+    const hi = Math.max(vh[a], vh[b], vh[c], vh[d]);
     qa.push(a); qk.push(hi); if (hi > hmax) hmax = hi;
   }
   const NQ = qa.length, B = 1024, cnt = new Uint32Array(B + 1), keys = new Uint16Array(NQ);
@@ -506,30 +505,39 @@ const SPL = program(VS, FS, ["u_tex", "u_proj", "u_eye", "u_rot", "u_focal", "u_
 const BG = program(BG_VS, BG_FS, ["u_proj", "u_eye", "u_rot", "u_rect", "u_z", "u_bg"]);
 const MESH_VS = `#version 300 es
 precision highp float;
-uniform mat4 u_proj; uniform vec3 u_eye; uniform vec2 u_rot; uniform float u_depth, u_zt, u_eyez;
+uniform mat4 u_proj; uniform vec3 u_eye; uniform vec2 u_rot; uniform float u_depth, u_zt, u_eyez, u_pxs;
 layout(location = 0) in vec3 a_p;     // x, y on the tiles and height, in world units
 layout(location = 1) in vec2 a_uv;
-out vec2 v_uv;
+out vec2 v_uv; out float v_h;
 void main(){
   float z = -u_zt + a_p.z * u_depth;
   float f = (u_eyez - z) / (u_eyez + u_zt);                     // slide along the camera's ray: exact photo at rest
   vec3 cam = vec3(a_p.xy * f, z) - u_eye;
   cam.xy = vec2(u_rot.x * cam.x - u_rot.y * cam.y, u_rot.y * cam.x + u_rot.x * cam.y);
   gl_Position = u_proj * vec4(cam, 1.0);
-  v_uv = a_uv;
+  v_uv = a_uv; v_h = a_p.z * u_pxs;                           // height in photo pixels
 }`;
 const MESH_FS = `#version 300 es
 precision highp float;
-uniform sampler2D u_photo, u_mask; uniform vec2 u_img;
-in vec2 v_uv; out vec4 o;
+uniform sampler2D u_photo, u_mask, u_behind; uniform vec2 u_img;
+in vec2 v_uv; in float v_h; out vec4 o;
 void main(){
   vec2 px = v_uv * u_img;
   float bd = min(min(px.x, u_img.x - px.x), min(px.y, u_img.y - px.y));
   float a = texture(u_mask, v_uv).b * smoothstep(0.0, 40.0, bd);  // objects dissolve at the photo's very edge
   if (a < 0.01) discard;
-  o = vec4(texture(u_photo, v_uv).rgb * a, a);
+  // height change per photo pixel: ~0-3 on real surfaces, 10+ on the cliff joining an object to what's behind it.
+  // Cliffs get stretched open when you lean, so paint them with the colour of the surface behind.
+  // true gradient of height over the photo (chain rule through the screen-space Jacobian), so it
+  // stays correct however far the triangle has been stretched on screen
+  float hx = dFdx(v_h), hy = dFdy(v_h), ux = dFdx(px.x), uy = dFdy(px.x), vx = dFdx(px.y), vy = dFdy(px.y);
+  float det = ux * vy - vx * uy;
+  float slope = abs(det) < 1e-9 ? 99.0 : length(vec2(hx * vy - hy * vx, hy * ux - hx * uy)) / abs(det);
+  float cliff = smoothstep(4.0, 9.0, slope);
+  vec3 col = mix(texture(u_photo, v_uv).rgb, texture(u_behind, v_uv).rgb * 0.58, cliff);   // what's just behind an object sits in its shadow
+  o = vec4(col * a, a);
 }`;
-const MESH = program(MESH_VS, MESH_FS, ["u_proj", "u_eye", "u_rot", "u_depth", "u_zt", "u_eyez", "u_photo", "u_mask", "u_img"]);
+const MESH = program(MESH_VS, MESH_FS, ["u_proj", "u_eye", "u_rot", "u_depth", "u_zt", "u_eyez", "u_pxs", "u_photo", "u_mask", "u_behind", "u_img"]);
 function texFrom(bmp, unit, mips){
   const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -541,14 +549,14 @@ function texFrom(bmp, unit, mips){
   else gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.activeTexture(gl.TEXTURE0); return t;
 }
-function uploadMesh(M, photoBmp, heightBmp){
+function uploadMesh(M, photoBmp, heightBmp, behindBmp){
   const vao2 = gl.createVertexArray(); gl.bindVertexArray(vao2);
   const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, M.V, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
   gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
   const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, M.I, gl.STATIC_DRAW);
   gl.bindVertexArray(null);
-  mesh = { vao: vao2, count: M.I.length, n: M.n, W: M.W, H: M.H, photo: texFrom(photoBmp, 2, true), mask: texFrom(heightBmp, 3, false) };
+  mesh = { vao: vao2, count: M.I.length, n: M.n, W: M.W, H: M.H, photo: texFrom(photoBmp, 2, true), mask: texFrom(heightBmp, 3, false), behind: texFrom(behindBmp, 4, true) };
   gl.bindVertexArray(vao);
 }
 const U = SPL.u;
@@ -843,7 +851,7 @@ function frame(now){
     gl.useProgram(MESH.p);
     gl.uniformMatrix4fv(MESH.u.u_proj, false, proj); gl.uniform3f(MESH.u.u_eye, head.x, head.y, head.z); gl.uniform2f(MESH.u.u_rot, rc, rs);
     gl.uniform1f(MESH.u.u_depth, depthNow()); gl.uniform1f(MESH.u.u_zt, ZT); gl.uniform1f(MESH.u.u_eyez, EYE_Z);
-    gl.uniform1i(MESH.u.u_photo, 2); gl.uniform1i(MESH.u.u_mask, 3); gl.uniform2f(MESH.u.u_img, mesh.W, mesh.H);
+    gl.uniform1i(MESH.u.u_photo, 2); gl.uniform1i(MESH.u.u_mask, 3); gl.uniform1i(MESH.u.u_behind, 4); gl.uniform1f(MESH.u.u_pxs, 1 / photoGeo.s); gl.uniform2f(MESH.u.u_img, mesh.W, mesh.H);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(mesh.vao); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0); gl.bindVertexArray(vao);
@@ -903,13 +911,13 @@ async function boot(){
   try {
     const step = (t) => { $("loadstep").textContent = t; };
     step("loading photo");
-    const [photo, height, table] = await Promise.all([loadImage("assets/photo.jpg"), loadImage("assets/height.png"), loadImage("assets/table.jpg")]);
+    const [photo, height, table, behind] = await Promise.all([loadImage("assets/photo.jpg"), loadImage("assets/height.png"), loadImage("assets/table.jpg"), loadImage("assets/behind.jpg")]);
     step("lifting it into depth");
     await new Promise(r => setTimeout(r, 20));
     const t0 = performance.now();
     const M = buildPhotoMesh(photo, height);
     uploadBackground(table);
-    uploadMesh(M, photo, height);
+    uploadMesh(M, photo, height, behind);
     showPhoto();
     window.__window.buildMs = Math.round(performance.now() - t0);
     $("loader").classList.add("done");

@@ -24,6 +24,39 @@ tn = h[sel.reshape(H,W)]; print('rim res', rim, 'k', k, 'bottle cap px', np.perc
 guide = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255
 hg = cv2.ximgproc.guidedFilter(guide, h.astype(np.float32), 4, 25.0)
 hg = np.maximum(hg, 0)
+# 3b) tame extreme heights with a soft knee: a standing bottle seen slightly from the side reads as a
+#     huge spike to a monocular depth model, and a spike that tall smears when you lean
+K0, K1 = 120.0, 100.0
+hg = np.where(hg > K0, K0 + K1 * np.tanh((hg - K0) / K1), hg).astype(np.float32)
+# 3c) turn soft depth ramps at object edges into clean steps (snap each edge pixel to the nearer of the
+#     local min/max), so objects separate from what's behind them instead of dragging it along
+ker = np.ones((9, 9), np.uint8)
+for _ in range(3):
+    mx = cv2.dilate(hg, ker); mn = cv2.erode(hg, ker)
+    edge = (mx - mn) > 20
+    snap = np.where(hg - mn < mx - hg, mn, mx)
+    hg = np.where(edge, snap, hg).astype(np.float32)
+hg = cv2.medianBlur(hg, 5)
+# 3d) "behind" colours for cliffs: on the high side of every depth step, replace the colour with the
+#     colour of the surface just beyond it (pushed in from the low side). The renderer paints stretched
+#     cliff triangles with this, so a gap opening beside the ginger shows board, beside a lime shows tile.
+k5 = np.ones((5, 5), np.uint8)
+hi_side = ((hg - cv2.erode(hg, k5)) > 20) & ((cv2.dilate(hg, k5) - hg) < 6)
+band = cv2.dilate(hi_side.astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+low_ok = ((hg - cv2.erode(hg, np.ones((15, 15), np.uint8))) < 10) & ~band
+def pushpull_f(im, w):
+    pyr = [(im * w[..., None], w)]
+    while min(pyr[-1][1].shape) > 8:
+        a_, b_ = pyr[-1]; pyr.append((cv2.pyrDown(a_), cv2.pyrDown(b_)))
+    acc, wacc = pyr[-1]; est = acc / np.maximum(wacc, 1e-6)[..., None]
+    for a_, b_ in reversed(pyr[:-1]):
+        up = cv2.resize(est, (a_.shape[1], a_.shape[0]), interpolation=cv2.INTER_LINEAR)
+        here = a_ / np.maximum(b_, 1e-6)[..., None]; k = np.clip(b_ * 4, 0, 1)[..., None]
+        est = here * k + up * (1 - k)
+    return est
+behind = pushpull_f(img.astype(np.float32), low_ok.astype(np.float32))
+farcol = img.astype(np.float32).copy(); farcol[band] = behind[band]
+print('cliff band px', int(band.sum()))
 # 4) object mask: anything clearly above the tiles (threshold from the tile noise)
 THR = max(9.0, float(np.percentile(np.abs(hg[sel.reshape(H,W)]), 97)) * 1.15); print('thr', THR)
 m = (hg > THR).astype(np.uint8)
@@ -79,6 +112,7 @@ fall = (0.12 + 0.88 * np.exp(-r * 7.5))[..., None]
 ext = np.clip(ext * fall, 0, 255).astype(np.uint8)
 cv2.imwrite('./work/table_ext.jpg', ext, [cv2.IMWRITE_JPEG_QUALITY, 93])
 cv2.imwrite('./work/photo.jpg', img_v, [cv2.IMWRITE_JPEG_QUALITY, 96])
+cv2.imwrite('./work/behind.jpg', np.clip(farcol * edgefade, 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 90])
 # 7) height (16-bit, 1/16 px units) + alpha packed into one PNG
 hq = np.clip(hg * 16, 0, 65535).astype(np.uint16)
 pack = np.dstack([(alpha * 255).astype(np.uint8), (hq & 255).astype(np.uint8), (hq >> 8).astype(np.uint8)])   # BGR order -> R=hi, G=lo, B=alpha
