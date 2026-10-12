@@ -65,11 +65,10 @@ button[aria-pressed="true"]{border-color:var(--flame);color:var(--flame)}
 .slider{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font:400 11px/1 var(--mono);color:var(--ink-dim);letter-spacing:.06em;text-transform:uppercase}
 .slider output{color:var(--ink);font-variant-numeric:tabular-nums;min-width:3.5ch;text-align:right}
 input[type=range]{width:100%;accent-color:var(--flame)}
-.cam{position:relative;width:208px;aspect-ratio:4/3;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--glass-line);background:#0d130f;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.cam{position:relative;width:208px;aspect-ratio:4/3;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid rgba(242,166,84,.16);background:radial-gradient(120% 95% at 28% 0%,#3a2a17 0%,#1a1410 48%,#0c0a08 100%);box-shadow:0 12px 40px rgba(0,0,0,.45)}
 .cam canvas{position:absolute;inset:0;width:100%;height:100%}
 .cam video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}   /* feeds the tracker only; never shown */
 .cam span{position:absolute;left:10px;bottom:8px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.8)}
-.cam .camtop{top:8px;bottom:auto;color:rgba(239,232,223,.62);letter-spacing:.12em}
 
 #show{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));opacity:0;pointer-events:none;padding:8px 12px;font-size:11px;transition:opacity .3s}
 body.clean #show{opacity:.35;pointer-events:auto}
@@ -127,8 +126,7 @@ body.clean #show:hover{opacity:1}
       <div class="cam" id="cam" hidden>
         <video id="video" playsinline muted></video>
         <canvas id="camcv" width="416" height="312" aria-label="A sculpted 3D model of your face, moving with you"></canvas>
-        <span class="camtop" title="Only your face's shape is drawn here, never the video. The camera feed stays on this device.">Shape only · no video</span>
-        <span id="camlabel">Searching</span>
+        <span id="camlabel"></span>
       </div>
       <div class="tools">
         <h2>Window</h2>
@@ -599,7 +597,7 @@ const MP_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarke
 const HFOV = 62 * Math.PI / 180;
 let tracker = null, stream = null, lastVideoT = -1, face = null, calib = null, lostAt = 0, lastDetect = 0;
 // One Euro: heavy smoothing while you hold still (kills jitter), the cutoff opens up the moment you move (kills lag).
-const fx1 = new OneEuro(1.4, 4.0, 3.0), fy1 = new OneEuro(1.4, 4.0, 3.0), fr1 = new OneEuro(1.2, 2.5, 3.0);
+const fx1 = new OneEuro(1.4, 4.0, 3.0), fy1 = new OneEuro(1.4, 4.0, 3.0), fr1 = new OneEuro(1.2, 2.5, 3.0), fd1 = new OneEuro(0.8, 1.5, 2.0);
 
 async function startTracking(){
   const btn = $("track");
@@ -610,7 +608,7 @@ async function startTracking(){
     try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } }, audio: false }); }
     catch (e){ throw Object.assign(new Error(e.name || "camera"), { kind: e.name === "NotAllowedError" ? "denied" : "blocked" }); }
     const video = $("video"); video.srcObject = stream; await video.play();
-    $("cam").hidden = false; $("camlabel").textContent = "Loading face model"; drawFaceCard(null);
+    $("cam").hidden = false; $("camlabel").textContent = "Loading"; drawFaceCard(null);
     btn.textContent = "Loading face model…";
     let vision;
     try { vision = await import(`${MP_BASE}/vision_bundle.mjs`); }
@@ -622,7 +620,7 @@ async function startTracking(){
     catch (e){ tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
     calib = null; setMode("face");
     btn.disabled = false; btn.textContent = "Turn off head tracking";
-    $("camlabel").textContent = "Tracking";
+    $("camlabel").textContent = "";
     toast("Head tracking is on. Sit about an arm's length away, lean around and tilt your head. Hit Recenter if the view feels off-centre.");
   } catch (e){
     stopTracking();
@@ -648,7 +646,7 @@ function pollTracker(now){
   lastVideoT = video.currentTime; lastDetect = now;
   let res; try { res = tracker.detectForVideo(video, now); } catch (e){ return; }
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
-  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "No face"; drawFaceCard(null); return; }
+  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "Looking for you"; drawFaceCard(null); return; }
   const vw = video.videoWidth, vh = video.videoHeight, fpx = (vw / 2) / Math.tan(HFOV / 2);
   const L = lm[468] || lm[33], R = lm[473] || lm[263];
   const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
@@ -658,11 +656,11 @@ function pollTracker(now){
   // your head toward your right shoulder reads as a positive (clockwise, as you see it) tilt
   const P0 = lx < rx ? [lx, ly] : [rx, ry], P1 = lx < rx ? [rx, ry] : [lx, ly];
   const roll = -Math.atan2(P1[1] - P0[1], P1[0] - P0[0]);
-  face = { x: fx1.f(-(mx - vw / 2) / fpx * dist / SCREEN_HALF_M, t), y: fy1.f(-(my - vh / 2) / fpx * dist / SCREEN_HALF_M, t), r: fr1.f(roll, t), t: now };
+  face = { x: fx1.f(-(mx - vw / 2) / fpx * dist / SCREEN_HALF_M, t), y: fy1.f(-(my - vh / 2) / fpx * dist / SCREEN_HALF_M, t), r: fr1.f(roll, t), d: fd1.f(dist, t), t: now };
   face.vx = fx1.dx; face.vy = fy1.dx; face.vr = fr1.dx;
-  if (!calib) calib = { x: face.x, y: face.y, r: face.r, n: 1 };
-  else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.n++; }
-  $("camlabel").textContent = `Tracking · ${Math.round(dist * 100)} cm`;
+  if (!calib) calib = { x: face.x, y: face.y, r: face.r, d: face.d, n: 1 };
+  else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.d = mix(calib.d, face.d, k); calib.n++; }
+  $("camlabel").textContent = `${Math.round(dist * 100)} cm`;
   drawFaceCard(lm, vw, vh);
 }
 
@@ -678,66 +676,78 @@ function buildTris(conns){
   for (const [a, na] of adj) for (const b of na) if (b > a) for (const c of adj.get(b)) if (c > b && na.has(c)) out.push(a, b, c);
   return out.length ? Uint16Array.from(out) : null;
 }
-function drawCardBackground(g, W, H){
-  const bgG = g.createRadialGradient(W * 0.3, -H * 0.15, 4, W * 0.45, H * 0.45, W * 0.95);
-  bgG.addColorStop(0, "rgb(92,78,42)"); bgG.addColorStop(0.35, "rgb(30,52,38)"); bgG.addColorStop(1, "rgb(10,17,13)");
-  g.fillStyle = bgG; g.fillRect(0, 0, W, H);
-  // the counter's tiles, faintly: green squares with warm grout
-  const step = W / 4.2; g.lineWidth = Math.max(1, W / 260); g.strokeStyle = "rgba(255,226,180,.09)";
-  g.beginPath();
-  for (let x = (W % step) / 2; x < W; x += step){ g.moveTo(x, 0); g.lineTo(x, H); }
-  for (let y = (H % step) / 2; y < H; y += step){ g.moveTo(0, y); g.lineTo(W, y); }
-  g.stroke();
+// A small WebGL view of its own: smooth per-vertex lighting, depth-tested, transparent over the card.
+let faceGL = null;
+function initFaceGL(){
+  if (faceGL !== null) return faceGL;
+  const cv = $("camcv"), g2 = cv.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true, depth: true });
+  if (!g2){ faceGL = false; return false; }
+  const vs = `attribute vec3 p; attribute vec3 n; varying vec3 vn; varying vec3 vp;
+    void main(){ vn = n; vp = p; gl_Position = vec4(p.x, -p.y, p.z, 1.0); }`;
+  const fs = `precision mediump float; varying vec3 vn; varying vec3 vp;
+    uniform vec3 glaze; uniform float fade;
+    void main(){
+      vec3 N = normalize(vn); vec3 V = vec3(0.0, 0.0, -1.0);
+      vec3 L = normalize(vec3(-0.5, -0.75, -0.6));            // the counter lamp: top-left, in front
+      vec3 F = normalize(vec3(0.6, 0.7, -0.35));               // soft bounce off the tiles, from below-right
+      float diff = max(dot(N, L), 0.0), fill = max(dot(N, F), 0.0);
+      float spec = pow(max(dot(N, normalize(L + V)), 0.0), 56.0);
+      float sheen = pow(max(dot(N, normalize(L + V)), 0.0), 9.0);
+      float ndv = max(dot(N, V), 0.0);
+      vec3 col = glaze * (0.10 + 1.05 * diff) + glaze * vec3(0.55, 0.8, 0.6) * fill * 0.35;
+      col *= mix(0.45, 1.0, pow(ndv, 0.6));                     // edges fall into shadow: reads solid
+      col += vec3(1.0, 0.82, 0.58) * (spec * 0.95 + sheen * 0.08);   // warm glaze highlight
+      gl_FragColor = vec4(col * fade, fade);
+    }`;
+  const mk = (t, src) => { const sh_ = g2.createShader(t); g2.shaderSource(sh_, src); g2.compileShader(sh_); return sh_; };
+  const pr = g2.createProgram(); g2.attachShader(pr, mk(g2.VERTEX_SHADER, vs)); g2.attachShader(pr, mk(g2.FRAGMENT_SHADER, fs)); g2.linkProgram(pr);
+  if (!g2.getProgramParameter(pr, g2.LINK_STATUS)){ faceGL = false; return false; }
+  faceGL = { g: g2, pr, pb: g2.createBuffer(), nb: g2.createBuffer(), ib: g2.createBuffer(), ap: g2.getAttribLocation(pr, "p"), an: g2.getAttribLocation(pr, "n"),
+    uGlaze: g2.getUniformLocation(pr, "glaze"), uFade: g2.getUniformLocation(pr, "fade"), nIdx: 0, triRef: null };
+  return faceGL;
 }
 function drawFaceCard(lm, vw, vh){
-  const cv = $("camcv"), g = cv.getContext("2d"), W = cv.width, H = cv.height;
-  drawCardBackground(g, W, H);
-  let dim = 1;
-  if (lm){ lastLm = lm; lastLmW = vw; lastLmH = vh; } else if (lastLm){ lm = lastLm; vw = lastLmW; vh = lastLmH; dim = 0.35; } else return;
-  const n = lm.length, P = new Float32Array(n * 3);
-  // fit the camera frame into the 4:3 card (cover), mirrored
+  const F = initFaceGL(); if (!F || !TRIS) return;
+  const g2 = F.g, cv = $("camcv"), W = cv.width, H = cv.height;
+  let fade = 1;
+  if (lm){ lastLm = lm; lastLmW = vw; lastLmH = vh; } else if (lastLm){ lm = lastLm; vw = lastLmW; vh = lastLmH; fade = 0.3; }
+  g2.viewport(0, 0, W, H); g2.clearColor(0, 0, 0, 0); g2.clearDepth(1); g2.clear(g2.COLOR_BUFFER_BIT | g2.DEPTH_BUFFER_BIT);
+  if (!lm) return;
+  if (F.triRef !== TRIS){ g2.bindBuffer(g2.ELEMENT_ARRAY_BUFFER, F.ib); g2.bufferData(g2.ELEMENT_ARRAY_BUFFER, TRIS, g2.STATIC_DRAW); F.nIdx = TRIS.length; F.triRef = TRIS; }
+  const n = lm.length, P = new Float32Array(n * 3), N = new Float32Array(n * 3);
+  // camera frame fitted into the 4:3 card (cover) and mirrored, in clip space; y down, z toward the camera is negative
   const sc = Math.max(W / vw, H / vh), ox = (W - vw * sc) / 2, oy = (H - vh * sc) / 2;
-  for (let i = 0; i < n; i++){ P[i * 3] = W - (lm[i].x * vw * sc + ox); P[i * 3 + 1] = lm[i].y * vh * sc + oy; P[i * 3 + 2] = lm[i].z * vw * sc; }
-  // warm key light from the top-left (the counter lamp), a cool green bounce from below-right
-  const Lx = -0.42, Ly = -0.72, Lz = -0.55, ll = Math.hypot(Lx, Ly, Lz);
-  if (TRIS){
-    const nt = TRIS.length / 3, order = new Array(nt), depth = new Float32Array(nt);
-    for (let t = 0; t < nt; t++){ order[t] = t; depth[t] = P[TRIS[t * 3] * 3 + 2] + P[TRIS[t * 3 + 1] * 3 + 2] + P[TRIS[t * 3 + 2] * 3 + 2]; }
-    order.sort((a, b) => depth[b] - depth[a]);                       // far first (larger z = further from the camera)
-    g.lineJoin = "round"; g.lineWidth = 0.9;
-    for (const t of order){
-      const a = TRIS[t * 3] * 3, b = TRIS[t * 3 + 1] * 3, c = TRIS[t * 3 + 2] * 3;
-      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
-      const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
-      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const nl = Math.hypot(nx, ny, nz) || 1;
-      nx /= nl; ny /= nl; nz /= nl; if (nz > 0){ nx = -nx; ny = -ny; nz = -nz; }      // face the viewer
-      const diff = Math.max(0, (nx * Lx + ny * Ly + nz * Lz) / ll);
-      const bounce = Math.max(0, nx * 0.5 + ny * 0.6 - nz * 0.2) * 0.35;
-      const rim = Math.pow(1 - Math.abs(nz), 3);
-      const k = (0.14 + 0.92 * diff) * dim;
-      const r = Math.min(255, 238 * k + 20 * bounce * dim + 40 * rim * dim);
-      const gg = Math.min(255, 214 * k + 70 * bounce * dim + 60 * rim * dim);
-      const bb = Math.min(255, 182 * k + 48 * bounce * dim + 44 * rim * dim);
-      const col = `rgb(${r | 0},${gg | 0},${bb | 0})`;
-      g.fillStyle = col; g.strokeStyle = col;
-      g.beginPath(); g.moveTo(P[a], P[a + 1]); g.lineTo(P[b], P[b + 1]); g.lineTo(P[c], P[c + 1]); g.closePath(); g.fill(); g.stroke();
-    }
-  } else {
-    g.fillStyle = `rgba(238,214,182,${0.8 * dim})`;
-    for (let i = 0; i < n; i++) g.fillRect(P[i * 3] - 1, P[i * 3 + 1] - 1, 2, 2);
+  for (let i = 0; i < n; i++){
+    P[i * 3] = 1 - 2 * (lm[i].x * vw * sc + ox) / W;
+    P[i * 3 + 1] = 2 * (lm[i].y * vh * sc + oy) / H - 1;
+    P[i * 3 + 2] = lm[i].z * vw * sc / W * 2;
   }
-  // irises: dark glass with a lamp highlight
-  if (n > 473) for (const i of [468, 473]){
-    const x = P[i * 3], y = P[i * 3 + 1], r = Math.max(2, Math.hypot(P[(i + 1) * 3] - x, P[(i + 1) * 3 + 1] - y) * 0.95);
-    g.fillStyle = `rgba(28,22,16,${0.9 * dim})`; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-    g.fillStyle = `rgba(242,166,84,${0.95 * dim})`; g.beginPath(); g.arc(x - r * 0.35, y - r * 0.35, Math.max(1, r * 0.3), 0, Math.PI * 2); g.fill();
+  // smooth normals: area-weighted face normals, each turned toward the viewer, summed per vertex
+  const ax = W / 2, ay = H / 2;                               // undo the clip-space squash so normals are true
+  for (let t = 0; t < TRIS.length; t += 3){
+    const a = TRIS[t] * 3, b = TRIS[t + 1] * 3, c = TRIS[t + 2] * 3;
+    const ux = (P[b] - P[a]) * ax, uy = (P[b + 1] - P[a + 1]) * ay, uz = (P[b + 2] - P[a + 2]) * ax;
+    const vx = (P[c] - P[a]) * ax, vy = (P[c + 1] - P[a + 1]) * ay, vz = (P[c + 2] - P[a + 2]) * ax;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    if (nz > 0){ nx = -nx; ny = -ny; nz = -nz; }
+    for (const k of [a, b, c]){ N[k] += nx; N[k + 1] += ny; N[k + 2] += nz; }
   }
+  g2.useProgram(F.pr);
+  g2.bindBuffer(g2.ARRAY_BUFFER, F.pb); g2.bufferData(g2.ARRAY_BUFFER, P, g2.DYNAMIC_DRAW); g2.enableVertexAttribArray(F.ap); g2.vertexAttribPointer(F.ap, 3, g2.FLOAT, false, 0, 0);
+  g2.bindBuffer(g2.ARRAY_BUFFER, F.nb); g2.bufferData(g2.ARRAY_BUFFER, N, g2.DYNAMIC_DRAW); g2.enableVertexAttribArray(F.an); g2.vertexAttribPointer(F.an, 3, g2.FLOAT, false, 0, 0);
+  g2.bindBuffer(g2.ELEMENT_ARRAY_BUFFER, F.ib);
+  g2.enable(g2.DEPTH_TEST); g2.depthFunc(g2.LESS);
+  g2.uniform3f(F.uGlaze, 0.17, 0.44, 0.31);                  // the tiles' green glaze
+  g2.uniform1f(F.uFade, fade);
+  g2.drawElements(g2.TRIANGLES, F.nIdx, g2.UNSIGNED_SHORT, 0);
 }
 
 /* =========================================================================
    8. Frame loop
    ========================================================================= */
 let last = performance.now(), fpsEma = 60, fpsT = 0, frozen = null, depthGain = 1;
+// closeness: lean toward the screen and the counter's depth grows, sit back and it flattens (framing never zooms)
+const springD = { x: 1, v: 0 };
 function frame(now){
   const dt = Math.min(0.1, (now - last) / 1000); last = now; const t = now / 1000;
   fpsEma = mix(fpsEma, 1 / Math.max(dt, 1e-3), 0.05);
@@ -763,6 +773,8 @@ function frame(now){
   if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springR.x = tr = frozen.r || 0; springX.v = springY.v = springR.v = 0; }
   const omega = mode === "face" ? 26 : mode === "pointer" ? 9 : 2.5;
   springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega); springStep(springR, tr, dt, omega);
+  const tc = (mode === "face" && face && calib && face.d) ? clamp(calib.d / face.d, 0.55, 2.2) : 1;
+  springStep(springD, tc, dt, mode === "face" ? 14 : 4);
   head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z; head.roll = -springR.x;   // tilt follows your head the other way round
 
   resize();
@@ -784,7 +796,7 @@ function frame(now){
     gl.uniform1i(U.u_tex, 0);
     gl.uniform1f(U.u_time, reduceMotion ? 0 : t);
     const photo = sceneKind === "photo";
-    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain : 1); gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
+    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain * Math.pow(springD.x, 1.4) : 1); gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCount);
   }
   requestAnimationFrame(frame);
@@ -801,7 +813,7 @@ addEventListener("keydown", (e) => { if ((e.key === "h" || e.key === "H") && e.t
 $("gain").addEventListener("input", (e) => { gain = parseFloat(e.target.value); $("gainv").textContent = gain.toFixed(2); });
 $("depth").addEventListener("input", (e) => { depthGain = parseFloat(e.target.value); $("depthv").textContent = depthGain.toFixed(2); });
 $("tiltg").addEventListener("input", (e) => { tiltGain = parseFloat(e.target.value); $("tiltv").textContent = tiltGain.toFixed(2); });
-$("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, r: face.r, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
+$("recenter").addEventListener("click", () => { if (face) calib = { x: face.x, y: face.y, r: face.r, d: face.d, n: 20 }; pointer.x = 0; pointer.y = 0; toast(face ? "Recentred on where your head is now." : "Recentred."); });
 
 async function loadBuffer(buf, name){
   $("loader").classList.remove("done"); $("loader").innerHTML = "Reading capture<br>" + name;
