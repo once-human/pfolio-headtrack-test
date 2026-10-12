@@ -7,7 +7,7 @@
    Type sits lower-left like a placard on the glass; instruments live in the corners. Single dark world by choice. */
 :root{
   --void:#070605;
-  --glass:rgba(16,13,11,.62);
+  --glass:rgba(16,13,11,.84);
   --glass-line:rgba(232,214,196,.14);
   --ink:#efe8df;
   --ink-dim:#a59a8e;
@@ -21,10 +21,9 @@
 html,body{height:100%}
 body{background:var(--void);color:var(--ink);font-family:var(--body);overflow:hidden;-webkit-font-smoothing:antialiased}
 #gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;background:var(--void)}
-.grain{position:fixed;inset:-50%;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+.grain{position:fixed;inset:0;pointer-events:none;opacity:.035;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -.2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  animation:grain 1s steps(6) infinite}
-@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-4%)}60%{transform:translate(-4%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+}
 .vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(115% 85% at 50% 50%,transparent 50%,rgba(0,0,0,.6) 100%)}
 .scrim{position:fixed;left:0;right:0;bottom:0;height:min(58vh,500px);pointer-events:none;background:linear-gradient(to top,rgba(5,4,3,.85),rgba(5,4,3,.3) 55%,transparent)}
 
@@ -48,7 +47,7 @@ h1{margin:0;font-family:var(--display);font-weight:900;font-size:clamp(64px,min(
 .lede{margin:0;max-width:44ch;font-size:15px;line-height:1.55;color:#d8cfc4;text-wrap:pretty}
 .lede em{font-style:normal;color:var(--flame)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-button,.btn{font:500 13px/1 var(--body);letter-spacing:.01em;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);border-radius:999px;padding:11px 16px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .2s,border-color .2s,transform .1s;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+button,.btn{font:500 13px/1 var(--body);letter-spacing:.01em;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);border-radius:999px;padding:11px 16px;cursor:pointer;transition:background .2s,border-color .2s,transform .1s;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 button:hover,.btn:hover{border-color:rgba(239,232,223,.4)}
 button:active,.btn:active{transform:scale(.97)}
 button:focus-visible,.btn:focus-within,input:focus-visible{outline:2px solid var(--flame);outline-offset:2px}
@@ -58,7 +57,7 @@ button[aria-pressed="true"]{border-color:var(--flame);color:var(--flame)}
 .btn input{position:absolute;width:1px;height:1px;opacity:0}
 
 .panel{display:flex;flex-direction:column;gap:10px;align-items:flex-end;min-width:0}
-.tools{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;padding:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);width:min(330px,100%)}
+.tools{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;padding:14px;width:min(330px,100%)}
 .tools h2{margin:0;font:500 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim)}
 .tools .row{gap:8px}
 .tools button,.tools .btn{padding:9px 12px;font-size:12px;background:rgba(255,255,255,.04)}
@@ -68,13 +67,13 @@ input[type=range]{width:100%;accent-color:var(--flame)}
 .cam{position:relative;width:104px;aspect-ratio:4/3;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--glass-line);background:#0d130f;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .cam canvas{position:absolute;inset:0;width:100%;height:100%}
 .cam video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}   /* feeds the tracker only; never shown */
-.cam span{position:absolute;left:10px;bottom:8px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.cam span{position:absolute;left:7px;bottom:6px;font:500 9px/1 var(--mono);letter-spacing:.08em;color:var(--flame);text-shadow:0 1px 6px rgba(0,0,0,.85);font-variant-numeric:tabular-nums}
 
 #show{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));opacity:0;pointer-events:none;padding:8px 12px;font-size:11px;transition:opacity .3s}
 body.clean #show{opacity:.35;pointer-events:auto}
 body.clean #show:hover{opacity:1}
 
-#toast{position:fixed;left:50%;top:calc(56px + env(safe-area-inset-top,0px));transform:translate(-50%,-8px);max-width:min(560px,calc(100% - 32px));background:rgba(14,11,9,.88);border:1px solid var(--glass-line);border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.5;color:var(--ink);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;backdrop-filter:blur(10px)}
+#toast{position:fixed;left:50%;top:calc(56px + env(safe-area-inset-top,0px));transform:translate(-50%,-8px);max-width:min(560px,calc(100% - 32px));background:rgba(14,11,9,.88);border:1px solid var(--glass-line);border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.5;color:var(--ink);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #loader{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;font:500 12px/1.6 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);text-align:center;transition:opacity .6s}
 #loader.done{opacity:0}
@@ -92,7 +91,7 @@ body.clean #show:hover{opacity:1}
   .stats{gap:12px}
   .scrim{height:78vh}
 }
-@media (prefers-reduced-motion:reduce){.grain{animation:none}}
+
 </style>
 
 <canvas id="gl" aria-label="A green-tiled kitchen counter at night, seen from above: a cutting board with mint, limes and ginger, raspberries, a jigger of red liqueur, a pink ice tray and two bottles. The screen behaves like glass above the counter."></canvas>
@@ -106,7 +105,7 @@ body.clean #show:hover{opacity:1}
     <div><b>21:40</b> / The counter / Window study</div>
     <div class="stats" aria-live="polite">
       <span><i class="dot" id="mdot"></i>Mode <b id="mode">auto</b></span>
-      <span>Splats <b id="count">0</b></span>
+      <span>Points <b id="count">0</b></span>
       <span>Render <b id="res">–</b></span>
       <span><b id="fps">0</b> fps</span>
     </div>
@@ -115,7 +114,7 @@ body.clean #show:hover{opacity:1}
   <div class="bottom">
     <div class="placard">
       <h1 id="word">Muddle</h1>
-      <p class="lede">Mint, lime, raspberries and something red, half-made at 21:40. One photograph, lifted into depth by AI and rebuilt from a million gaussian splats; your screen is the glass above the counter. Turn on head tracking, then <em>lean in and look around</em>.</p>
+      <p class="lede">Mint, lime, raspberries and something red, half-made at 21:40. One photograph, lifted into 3D by AI; your screen is the glass above the counter. Turn on head tracking, then <em>lean in and look around</em>.</p>
       <div class="row">
         <button class="primary" id="track">Turn on head tracking</button>
         <button id="hide">Hide UI <span class="kbd">H</span></button>
@@ -126,6 +125,7 @@ body.clean #show:hover{opacity:1}
       <div class="cam" id="cam" hidden>
         <video id="video" playsinline muted></video>
         <canvas id="camcv" width="256" height="192" aria-label="A sculpted 3D model of your face, moving with you"></canvas>
+        <span id="camdist"></span>
       </div>
       <div class="tools">
         <h2>Window</h2>
@@ -239,42 +239,53 @@ function pixelsOf(bmp){
   return g.getImageData(0, 0, bmp.width, bmp.height).data;
 }
 
-function buildPhoto(photoBmp, heightBmp){
-  const W = photoBmp.width, H = photoBmp.height;
-  const col = pixelsOf(photoBmp), hd = pixelsOf(heightBmp);
-  // cover the window at the resting eye position, whatever the screen's shape
+// The counter as a textured depth mesh: a vertex every 2 photo pixels over the objects, colour and
+// edge alpha sampled per fragment straight from the photo and mask, so it is as sharp as the photo
+// itself at a small fraction of the GPU cost of drawing every pixel as a splat. Quads that span a
+// real depth edge are dropped, so leaning reveals the table layer instead of stretched pixels.
+let mesh = null;
+function buildPhotoMesh(photoBmp, heightBmp){
+  const W = photoBmp.width, H = photoBmp.height, hd = pixelsOf(heightBmp);
   const aspect = innerWidth / innerHeight, visW = 2 * (EYE_Z + ZT) / EYE_Z, visH = visW / aspect;
-  const s = Math.max(visW / W, visH / H) * 1.1;               // world units per photo pixel on the tiles; 10% overscan so ordinary leaning stays inside the photo
+  const s = Math.max(visW / W, visH / H) * 1.1;               // 10% overscan so ordinary leaning stays inside the photo
   photoGeo = { s, W, H };
-  const hp = new Float32Array(W * H), al = new Float32Array(W * H);
+  const hp = new Float32Array(W * H), on = new Uint8Array(W * H);
+  for (let k = 0; k < W * H; k++){ const o = k * 4; hp[k] = ((hd[o] << 8) | hd[o + 1]) / 16; on[k] = hd[o + 2] > 2 ? 1 : 0; }
+  // dilate the object mask by 3 px (separable box max) so mesh covers the soft edge fully
+  const R = 3, tmp = new Uint8Array(W * H), near = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++){ let c = 0; const row = y * W;
+    for (let x = -R; x < W; x++){ if (x + R < W) c += on[row + x + R]; if (x - R - 1 >= 0) c -= on[row + x - R - 1]; if (x >= 0) tmp[row + x] = c > 0 ? 1 : 0; } }
+  for (let x = 0; x < W; x++){ let c = 0;
+    for (let y = -R; y < H; y++){ if (y + R < H) c += tmp[(y + R) * W + x]; if (y - R - 1 >= 0) c -= tmp[(y - R - 1) * W + x]; if (y >= 0) near[y * W + x] = c > 0 ? 1 : 0; } }
+  const G = 2, GW = Math.floor((W - 1) / G) + 1, GH = Math.floor((H - 1) / G) + 1;
+  const idx = new Int32Array(GW * GH).fill(-1), vh = new Float32Array(GW * GH);
   let n = 0;
-  for (let k = 0; k < W * H; k++){
-    const o = k * 4; hp[k] = ((hd[o] << 8) | hd[o + 1]) / 16; al[k] = hd[o + 2] / 255;
-    if (al[k] > 0.02) n++;
+  for (let gj = 0; gj < GH; gj++) for (let gi = 0; gi < GW; gi++){ const k = gj * G * W + gi * G; if (near[k]){ idx[gj * GW + gi] = n++; vh[gj * GW + gi] = hp[k]; } }
+  const V = new Float32Array(n * 5);
+  for (let gj = 0; gj < GH; gj++) for (let gi = 0; gi < GW; gi++){
+    const v = idx[gj * GW + gi]; if (v < 0) continue;
+    const px = gi * G, py = gj * G, o = v * 5;
+    V[o] = (px - W / 2 + 0.5) * s; V[o + 1] = -(py - H / 2 + 0.5) * s; V[o + 2] = vh[gj * GW + gi] * s;
+    V[o + 3] = (px + 0.5) / W; V[o + 4] = (py + 0.5) / H;
   }
-  const S = new Splats(n);
-  const SIG = 0.55, slopeMax = 2.5;
-  for (let j = 0; j < H; j++){
-    for (let i = 0; i < W; i++){
-      const k = j * W + i, bd = Math.min(i, W - 1 - i, j, H - 1 - j), ef = Math.min(1, bd / 40);
-      const a = al[k] * ef * ef * (3 - 2 * ef);              // objects dissolve into the dark at the photo's very edge
-      if (a <= 0.02) continue;
-      const hz = hp[k] * s, z = -ZT + hz;
-      const f = (EYE_Z - z) / (EYE_Z + ZT);                      // shrink toward the eye: same apparent size as in the photo
-      const ps = s * f;
-      const x = (i - W / 2 + 0.5) * ps, y = -(j - H / 2 + 0.5) * ps;
-      // surface tangents from the height field, so steep sides (glass walls, bottle shoulders) stay closed
-      const dx = clamp((hp[j * W + Math.min(W - 1, i + 1)] - hp[j * W + Math.max(0, i - 1)]) * 0.5, -slopeMax, slopeMax);
-      const dy = clamp((hp[Math.min(H - 1, j + 1) * W + i] - hp[Math.max(0, j - 1) * W + i]) * 0.5, -slopeMax, slopeMax);
-      const t1x = ps, t1z = dx * s, t2y = -ps, t2z = dy * s;
-      const nx = -t1z * t2y, ny = -t1x * t2z, nz = t1x * t2y;   // t1 × t2 (sign doesn't matter for a covariance)
-      const nl = Math.hypot(nx, ny, nz) || 1;
-      const o = k * 4;
-      S.add(x, y, z, t1x, 0, t1z, SIG, 0, t2y, t2z, SIG, nx / nl, ny / nl, nz / nl, 0.12 * ps,
-        col[o] / 255, col[o + 1] / 255, col[o + 2] / 255, a, 0);
-    }
+  // quads, skipping real depth edges; ordered low to high so soft edges blend over what's beneath
+  const CUT = 30, qa = [], qk = []; let hmax = 1;
+  for (let gj = 0; gj < GH - 1; gj++) for (let gi = 0; gi < GW - 1; gi++){
+    const a = gj * GW + gi, b = a + 1, c = a + GW, d = c + 1;
+    if (idx[a] < 0 || idx[b] < 0 || idx[c] < 0 || idx[d] < 0) continue;
+    const lo = Math.min(vh[a], vh[b], vh[c], vh[d]), hi = Math.max(vh[a], vh[b], vh[c], vh[d]);
+    if (hi - lo > CUT) continue;
+    qa.push(a); qk.push(hi); if (hi > hmax) hmax = hi;
   }
-  return S;
+  const NQ = qa.length, B = 1024, cnt = new Uint32Array(B + 1), keys = new Uint16Array(NQ);
+  for (let q = 0; q < NQ; q++){ const kk = Math.min(B - 1, (qk[q] / hmax * (B - 1)) | 0); keys[q] = kk; cnt[kk + 1]++; }
+  for (let b = 0; b < B; b++) cnt[b + 1] += cnt[b];
+  const I = new Uint32Array(NQ * 6);
+  for (let q = 0; q < NQ; q++){
+    const a = qa[q], o = cnt[keys[q]]++ * 6, A = idx[a], Bv = idx[a + 1], C = idx[a + GW], D = idx[a + GW + 1];
+    I[o] = A; I[o + 1] = C; I[o + 2] = Bv; I[o + 3] = Bv; I[o + 4] = C; I[o + 5] = D;
+  }
+  return { V, I, n, W, H };
 }
 
 /* =========================================================================
@@ -493,6 +504,53 @@ function program(vs, fs, names){
 }
 const SPL = program(VS, FS, ["u_tex", "u_proj", "u_eye", "u_rot", "u_focal", "u_viewport", "u_time", "u_base", "u_depth", "u_opac"]);
 const BG = program(BG_VS, BG_FS, ["u_proj", "u_eye", "u_rot", "u_rect", "u_z", "u_bg"]);
+const MESH_VS = `#version 300 es
+precision highp float;
+uniform mat4 u_proj; uniform vec3 u_eye; uniform vec2 u_rot; uniform float u_depth, u_zt, u_eyez;
+layout(location = 0) in vec3 a_p;     // x, y on the tiles and height, in world units
+layout(location = 1) in vec2 a_uv;
+out vec2 v_uv;
+void main(){
+  float z = -u_zt + a_p.z * u_depth;
+  float f = (u_eyez - z) / (u_eyez + u_zt);                     // slide along the camera's ray: exact photo at rest
+  vec3 cam = vec3(a_p.xy * f, z) - u_eye;
+  cam.xy = vec2(u_rot.x * cam.x - u_rot.y * cam.y, u_rot.y * cam.x + u_rot.x * cam.y);
+  gl_Position = u_proj * vec4(cam, 1.0);
+  v_uv = a_uv;
+}`;
+const MESH_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_photo, u_mask; uniform vec2 u_img;
+in vec2 v_uv; out vec4 o;
+void main(){
+  vec2 px = v_uv * u_img;
+  float bd = min(min(px.x, u_img.x - px.x), min(px.y, u_img.y - px.y));
+  float a = texture(u_mask, v_uv).b * smoothstep(0.0, 40.0, bd);  // objects dissolve at the photo's very edge
+  if (a < 0.01) discard;
+  o = vec4(texture(u_photo, v_uv).rgb * a, a);
+}`;
+const MESH = program(MESH_VS, MESH_FS, ["u_proj", "u_eye", "u_rot", "u_depth", "u_zt", "u_eyez", "u_photo", "u_mask", "u_img"]);
+function texFrom(bmp, unit, mips){
+  const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  if (mips){ gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    const an = gl.getExtension("EXT_texture_filter_anisotropic"); if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT))); }
+  else gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.activeTexture(gl.TEXTURE0); return t;
+}
+function uploadMesh(M, photoBmp, heightBmp){
+  const vao2 = gl.createVertexArray(); gl.bindVertexArray(vao2);
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, M.V, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, M.I, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  mesh = { vao: vao2, count: M.I.length, n: M.n, W: M.W, H: M.H, photo: texFrom(photoBmp, 2, true), mask: texFrom(heightBmp, 3, false) };
+  gl.bindVertexArray(vao);
+}
 const U = SPL.u;
 
 const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -518,7 +576,7 @@ function uploadBackground(bmp){
   bgReady = true;
 }
 
-let drawCount = 0, photoScene = null, sceneKind = "photo";
+let drawCount = 0, sceneKind = "photo";
 function setScene(S, kind){
   const P = pack(S);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -594,6 +652,7 @@ const MP_VER = "0.10.14";
 const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
 const MP_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const HFOV = 62 * Math.PI / 180;
+let distLabelT = 0, cardT = 0;
 let tracker = null, stream = null, lastVideoT = -1, face = null, calib = null, lostAt = 0, lastDetect = 0;
 // One Euro: heavy smoothing while you hold still (kills jitter), the cutoff opens up the moment you move (kills lag).
 const fx1 = new OneEuro(1.4, 4.0, 3.0), fy1 = new OneEuro(1.4, 4.0, 3.0), fr1 = new OneEuro(1.2, 2.5, 3.0), fd1 = new OneEuro(0.8, 1.5, 2.0);
@@ -619,7 +678,6 @@ async function startTracking(){
     catch (e){ tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
     calib = null; setMode("face");
     btn.disabled = false; btn.textContent = "Turn off head tracking";
-    startSegmenter(vision, fileset);                      // hair outline: optional, loads in the background
     toast("Head tracking is on. Sit about an arm's length away, lean around and tilt your head. Hit Recenter if the view feels off-centre.");
   } catch (e){
     stopTracking();
@@ -635,7 +693,6 @@ function stopTracking(){
   if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (tracker){ try { tracker.close(); } catch (e){} tracker = null; }
   $("cam").hidden = true; face = null; lastLm = null;
-  if (segmenter){ try { segmenter.close(); } catch (e){} segmenter = null; } hair.ready = false;
   $("track").textContent = "Turn on head tracking";
   setMode(performance.now() - lastPointer < 6000 ? "pointer" : "auto");
 }
@@ -646,12 +703,13 @@ function pollTracker(now){
   lastVideoT = video.currentTime; lastDetect = now;
   let res; try { res = tracker.detectForVideo(video, now); } catch (e){ return; }
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
-  if (!lm){ if (face) lostAt = now; face = null; drawFaceCard(null); return; }
+  if (!lm){ if (face) lostAt = now; face = null; $("camdist").textContent = ""; drawFaceCard(null); return; }
   const vw = video.videoWidth, vh = video.videoHeight, fpx = (vw / 2) / Math.tan(HFOV / 2);
   const L = lm[468] || lm[33], R = lm[473] || lm[263];
   const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
   const ipd = Math.hypot(rx - lx, ry - ly); if (ipd < 4) return;
   const dist = 0.063 * fpx / ipd, mx = (lx + rx) / 2, my = (ly + ry) / 2, t = now / 1000;
+  if (now - distLabelT > 250){ $("camdist").textContent = `${Math.round(dist * 100)} cm`; distLabelT = now; }
   // roll: angle of the eye line, measured left-to-right in the raw camera image; negated so tilting
   // your head toward your right shoulder reads as a positive (clockwise, as you see it) tilt
   const P0 = lx < rx ? [lx, ly] : [rx, ry], P1 = lx < rx ? [rx, ry] : [lx, ly];
@@ -660,8 +718,7 @@ function pollTracker(now){
   face.vx = fx1.dx; face.vy = fy1.dx; face.vr = fr1.dx;
   if (!calib) calib = { x: face.x, y: face.y, r: face.r, d: face.d, n: 1 };
   else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.d = mix(calib.d, face.d, k); calib.n++; }
-  segmentHair(video, now);
-  drawFaceCard(lm, vw, vh);
+  if (now - cardT > 32){ drawFaceCard(lm, vw, vh); cardT = now; }
 }
 
 /* ---- the privacy-safe preview: a plaster mask built from the tracker's 3D face mesh ----
@@ -725,7 +782,6 @@ function drawFaceCard(lm, vw, vh){
     g.fillStyle = `rgba(238,214,182,${0.8 * dim})`;
     for (let i = 0; i < n; i++) g.fillRect(P[i * 3] - 1, P[i * 3 + 1] - 1, 2, 2);
   }
-  if (hair.ready) drawHair(g, W, H, P, sc, ox, oy, vw, vh, dim);
   // irises: dark glass with a lamp highlight
   if (n > 473) for (const i of [468, 473]){
     const x = P[i * 3], y = P[i * 3 + 1], r = Math.max(2, Math.hypot(P[(i + 1) * 3] - x, P[(i + 1) * 3 + 1] - y) * 0.95);
@@ -735,109 +791,13 @@ function drawFaceCard(lm, vw, vh){
 }
 
 
-/* ---- hair: the real outline from an on-device hair segmentation, drawn as lit strands ----
-   MediaPipe's multiclass selfie segmenter labels hair pixels. That outline (never the video)
-   decides where hair is; strands are generated on a grid that moves with your head so the
-   texture doesn't swim, flow outward from the face and fall with gravity below the eyes,
-   and take their colour from the average of your actual hair pixels. */
-const SEG_MODEL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
-let segmenter = null, segTick = 0;
-const hair = { ready: false, mw: 0, mh: 0, mask: document.createElement("canvas"), layer: document.createElement("canvas"), sample: document.createElement("canvas"),
-  col: [62, 44, 32], seeds: null };
-(function makeSeeds(){
-  const r = mulberry32(77), out = [];
-  for (let i = 0; i < 1400; i++) out.push({ u: (r() * 2 - 1) * 4.2, v: (r() * 2 - 1) * 4.6, len: 0.55 + r() * 0.9, bend: (r() - 0.5) * 0.9, tone: 0.55 + r() * 0.75, w: 0.5 + r() * 0.7 });
-  hair.seeds = out;
-})();
-async function startSegmenter(vision, fileset){
-  const opts = (delegate) => ({ baseOptions: { modelAssetPath: SEG_MODEL, delegate }, runningMode: "VIDEO", outputCategoryMask: true, outputConfidenceMasks: false });
-  try { segmenter = await vision.ImageSegmenter.createFromOptions(fileset, opts("GPU")); }
-  catch (e){ try { segmenter = await vision.ImageSegmenter.createFromOptions(fileset, opts("CPU")); } catch (e2){ segmenter = null; } }
-}
-function segmentHair(video, now){
-  if (!segmenter || (segTick++ & 1)) return;                 // every other camera frame is plenty for hair
-  let res; try { res = segmenter.segmentForVideo(video, now); } catch (e){ return; }
-  const m = res && res.categoryMask;
-  if (m){
-    const mw = m.width, mh = m.height, cat = m.getAsUint8Array();
-    const SW = 160, SH = Math.round(160 * mh / mw);
-    if (hair.mask.width !== SW || hair.mask.height !== SH){ hair.mask.width = SW; hair.mask.height = SH; }
-    const mg = hair.mask.getContext("2d"), id = mg.createImageData(SW, SH), d = id.data;
-    let any = 0;
-    for (let y = 0; y < SH; y++){
-      const sy = Math.min(mh - 1, Math.round((y + 0.5) * mh / SH - 0.5));
-      for (let x = 0; x < SW; x++){
-        const sx = Math.min(mw - 1, Math.round((x + 0.5) * mw / SW - 0.5));
-        const h = cat[sy * mw + sx] === 1 ? 255 : 0, o = (y * SW + x) * 4;
-        d[o] = d[o + 1] = d[o + 2] = 255; d[o + 3] = h; any += h;
-      }
-    }
-    mg.putImageData(id, 0, 0);
-    hair.mw = SW; hair.mh = SH; hair.ready = any > 0;
-    // hair colour: average of the real hair pixels (read from a tiny offscreen copy, never displayed)
-    if (hair.ready && (segTick & 7) === 0){
-      const sc = hair.sample, CW = 48, CH = Math.round(48 * mh / mw); sc.width = CW; sc.height = CH;
-      const cg = sc.getContext("2d", { willReadFrequently: true }); cg.drawImage(video, 0, 0, CW, CH);
-      const px = cg.getImageData(0, 0, CW, CH).data; let r = 0, g = 0, b = 0, n = 0;
-      for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++){
-        const sy = Math.min(mh - 1, Math.floor((y + 0.5) * mh / CH)), sx = Math.min(mw - 1, Math.floor((x + 0.5) * mw / CW));
-        if (cat[sy * mw + sx] !== 1) continue; const o = (y * CW + x) * 4; r += px[o]; g += px[o + 1]; b += px[o + 2]; n++;
-      }
-      if (n > 6){ const k = 0.25; hair.col = [mix(hair.col[0], r / n, k), mix(hair.col[1], g / n, k), mix(hair.col[2], b / n, k)]; }
-    }
-  }
-  try { if (m && m.close) m.close(); if (res && res.close) res.close(); } catch (e){}
-}
-function drawHair(g, W, H, P, sc, ox, oy, vw, vh, dim){
-  const L = hair.layer; if (L.width !== W || L.height !== H){ L.width = W; L.height = H; }
-  const hg = L.getContext("2d");
-  hg.setTransform(1, 0, 0, 1, 0, 0); hg.globalCompositeOperation = "source-over"; hg.clearRect(0, 0, W, H);
-  // head frame from the eyes: centre, scale (eye distance) and roll, so strands ride along with you
-  const ex = (P[468 * 3] + P[473 * 3]) / 2, ey = (P[468 * 3 + 1] + P[473 * 3 + 1]) / 2;
-  const ix = P[473 * 3] - P[468 * 3], iy = P[473 * 3 + 1] - P[468 * 3 + 1], ipd = Math.max(4, Math.hypot(ix, iy));
-  const ca = ix / ipd, sa = iy / ipd;
-  // base colour, a touch warmer under the lamp
-  const c = hair.col, base = [c[0] * 0.55 + 10, c[1] * 0.5 + 6, c[2] * 0.45 + 3];
-  hg.fillStyle = `rgb(${base[0] | 0},${base[1] | 0},${base[2] | 0})`; hg.fillRect(0, 0, W, H);
-  // strands
-  hg.lineCap = "round";
-  const unit = ipd * 0.62;
-  for (const s of hair.seeds){
-    const x0 = ex + (s.u * ca - s.v * sa) * unit, y0 = ey + (s.u * sa + s.v * ca) * unit;
-    if (x0 < -10 || y0 < -10 || x0 > W + 10 || y0 > H + 10) continue;
-    // hair falls away from the crown (above the forehead), not from the eyes
-    const cx_ = ex + sa * ipd * 1.7, cy_ = ey - ca * ipd * 1.7;
-    let dx = x0 - cx_, dy = y0 - cy_; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
-    dy = dy * 0.8 + 0.2; { const q = Math.hypot(dx, dy) || 1; dx /= q; dy /= q; }
-    const below = Math.max(0, (s.u * sa + s.v * ca) * unit) / (ipd * 1.2);       // below the eye line: hair falls
-    const gk = Math.min(1, below * 0.9); dx = dx * (1 - gk); dy = dy * (1 - gk) + gk;
-    const len = s.len * unit * (1 + gk * 1.6), nx = -dy, ny = dx;
-    const x1 = x0 + dx * len, y1 = y0 + dy * len, mx = (x0 + x1) / 2 + nx * s.bend * len * 0.35, my = (y0 + y1) / 2 + ny * s.bend * len * 0.35;
-    const lit = Math.max(0, (-dx * 0.45 - dy * 0.7) * 0.5 + 0.5);                  // strands facing the lamp catch light
-    const k = s.tone * (0.75 + 0.7 * lit);
-    hg.strokeStyle = `rgba(${Math.min(255, c[0] * k + 18 * lit) | 0},${Math.min(255, c[1] * k + 12 * lit) | 0},${Math.min(255, c[2] * k + 6 * lit) | 0},0.85)`;
-    hg.lineWidth = s.w * Math.max(0.8, W / 260);
-    hg.beginPath(); hg.moveTo(x0, y0); hg.quadraticCurveTo(mx, my, x1, y1); hg.stroke();
-  }
-  // a soft sheen band where the lamp hits the crown
-  const sh = hg.createRadialGradient(ex - ipd * 0.9, ey - ipd * 2.0, 1, ex - ipd * 0.6, ey - ipd * 1.6, ipd * 2.2);
-  sh.addColorStop(0, "rgba(255,214,160,.22)"); sh.addColorStop(1, "rgba(255,214,160,0)");
-  hg.fillStyle = sh; hg.fillRect(0, 0, W, H);
-  // keep only where the camera actually saw hair (mirrored + cover-fitted like the face), soft edge
-  hg.globalCompositeOperation = "destination-in";
-  hg.filter = `blur(${Math.max(0.6, W / 300)}px)`;
-  hg.setTransform(-sc * vw / hair.mw, 0, 0, sc * vh / hair.mh, W - ox, oy);
-  hg.drawImage(hair.mask, 0, 0);
-  hg.filter = "none"; hg.setTransform(1, 0, 0, 1, 0, 0); hg.globalCompositeOperation = "source-over";
-  g.globalAlpha = dim; g.drawImage(L, 0, 0); g.globalAlpha = 1;
-}
-
 /* =========================================================================
    8. Frame loop
    ========================================================================= */
 let last = performance.now(), fpsEma = 60, fpsT = 0, frozen = null, depthGain = 1;
 // closeness: lean toward the screen and the counter's depth grows, sit back and it flattens (framing never zooms)
 const springD = { x: 1, v: 0 };
+const depthNow = () => depthGain * Math.max(0.2, 1 + (Math.pow(springD.x, 1.4) - 1) * 1.5);   // 1.5x the closeness range
 function frame(now){
   const dt = Math.min(0.1, (now - last) / 1000); last = now; const t = now / 1000;
   fpsEma = mix(fpsEma, 1 / Math.max(dt, 1e-3), 0.05);
@@ -869,24 +829,29 @@ function frame(now){
 
   resize();
   gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clearColor(0.03, 0.04, 0.03, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clearColor(0.03, 0.04, 0.03, 1); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.bindVertexArray(vao);
   gl.useProgram(SPL.p); computeMatrices();              // fills `proj` and sets the splat program's camera uniforms
-  if (bgReady && sceneKind === "photo" && photoGeo){
+  const rc = Math.cos(head.roll), rs = Math.sin(head.roll);
+  if (sceneKind === "photo" && mesh && bgReady){
     const { s, W, H } = photoGeo;
-    gl.useProgram(BG.p); gl.disable(gl.BLEND);
-    gl.uniformMatrix4fv(BG.u.u_proj, false, proj); gl.uniform3f(BG.u.u_eye, head.x, head.y, head.z);
-    gl.uniform2f(BG.u.u_rot, Math.cos(head.roll), Math.sin(head.roll));
+    gl.useProgram(BG.p); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
+    gl.uniformMatrix4fv(BG.u.u_proj, false, proj); gl.uniform3f(BG.u.u_eye, head.x, head.y, head.z); gl.uniform2f(BG.u.u_rot, rc, rs);
     gl.uniform4f(BG.u.u_rect, (-W / 2 - PHOTO_PAD) * s, (-H / 2 - PHOTO_PAD) * s, (W / 2 + PHOTO_PAD) * s, (H / 2 + PHOTO_PAD) * s);
     gl.uniform1f(BG.u.u_z, -ZT); gl.uniform1i(BG.u.u_bg, 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
-  if (drawCount){
+    gl.useProgram(MESH.p);
+    gl.uniformMatrix4fv(MESH.u.u_proj, false, proj); gl.uniform3f(MESH.u.u_eye, head.x, head.y, head.z); gl.uniform2f(MESH.u.u_rot, rc, rs);
+    gl.uniform1f(MESH.u.u_depth, depthNow()); gl.uniform1f(MESH.u.u_zt, ZT); gl.uniform1f(MESH.u.u_eyez, EYE_Z);
+    gl.uniform1i(MESH.u.u_photo, 2); gl.uniform1i(MESH.u.u_mask, 3); gl.uniform2f(MESH.u.u_img, mesh.W, mesh.H);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindVertexArray(mesh.vao); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0); gl.bindVertexArray(vao);
+    gl.disable(gl.DEPTH_TEST);
+  } else if (drawCount){
     gl.useProgram(SPL.p); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.uniform1i(U.u_tex, 0);
-    gl.uniform1f(U.u_time, reduceMotion ? 0 : t);
-    const photo = sceneKind === "photo";
-    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain * Math.max(0.2, 1 + (Math.pow(springD.x, 1.4) - 1) * 1.5) : 1);   // 1.5x the closeness range gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
+    gl.uniform1i(U.u_tex, 0); gl.uniform1f(U.u_time, reduceMotion ? 0 : t);
+    gl.uniform1f(U.u_base, 0); gl.uniform1f(U.u_depth, 1); gl.uniform1f(U.u_opac, 1);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCount);
   }
   requestAnimationFrame(frame);
@@ -927,16 +892,12 @@ $("turn").addEventListener("click", () => { capture.rot = mul3(rotY(Math.PI / 2)
 $("tilt").addEventListener("click", () => { capture.rot = mul3(rotX(Math.PI / 2), capture.rot); rebuildCapture(); });
 let distT = 0;
 $("dist").addEventListener("input", (e) => { capture.dist = parseFloat(e.target.value); $("distv").textContent = capture.dist.toFixed(2); clearTimeout(distT); distT = setTimeout(rebuildCapture, 60); });
-$("back").addEventListener("click", () => { capture = null; setScene(photoScene, "photo"); });
+function showPhoto(){ sceneKind = "photo"; $("count").textContent = mesh ? mesh.n.toLocaleString("en-US") : "0"; $("captureTools").hidden = true; $("word").textContent = "Muddle"; }
+$("back").addEventListener("click", () => { capture = null; showPhoto(); });
 
 // test hook: freeze the head at a given offset
 window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount,
-  faceTest: (lm, conns, vw, vh, hairFn) => {
-    TRIS = buildTris(conns); $("cam").hidden = false;
-    if (hairFn){ const SW = 160, SH = 120; hair.mask.width = SW; hair.mask.height = SH; const mg = hair.mask.getContext("2d"), id = mg.createImageData(SW, SH);
-      for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++){ const o = (y * SW + x) * 4; id.data[o] = id.data[o + 1] = id.data[o + 2] = 255; id.data[o + 3] = hairFn(x / SW, y / SH) ? 255 : 0; }
-      mg.putImageData(id, 0, 0); hair.mw = SW; hair.mh = SH; hair.ready = true; }
-    drawFaceCard(lm, vw, vh); } };
+  faceTest: (lm, conns, vw, vh) => { TRIS = buildTris(conns); $("cam").hidden = false; drawFaceCard(lm, vw, vh); $("camdist").textContent = "54 cm"; } };
 
 async function boot(){
   try {
@@ -946,9 +907,10 @@ async function boot(){
     step("lifting it into depth");
     await new Promise(r => setTimeout(r, 20));
     const t0 = performance.now();
-    photoScene = buildPhoto(photo, height);
+    const M = buildPhotoMesh(photo, height);
     uploadBackground(table);
-    setScene(photoScene, "photo");
+    uploadMesh(M, photo, height);
+    showPhoto();
     window.__window.buildMs = Math.round(performance.now() - t0);
     $("loader").classList.add("done");
   } catch (e){

@@ -12,11 +12,13 @@ Live: https://pfolio-headtrack-test.vercel.app
 4. **Layers.**
    - `assets/table.jpg`: the tiles with the objects removed. Underneath each object the fill darkens like a contact shadow, and past the photo's edges it falls off into darkness.
    - `assets/height.png`: per-pixel height (R = high byte, G = low byte, in 1/16 px) and the object mask (B).
-5. **Render.** WebGL2. The tiles are one textured quad. Each object pixel (~960k) becomes a gaussian splat, placed along the ray the camera saw it on, so the resting view reproduces the photo exactly. Splats are stretched along the surface slope so steep sides stay closed. They are sorted once by depth; the camera only translates and rolls, so the order never changes.
+5. **Render.** WebGL2. The tiles are one textured quad. The objects are a textured depth mesh: a vertex every 2 photo pixels (~250k), slid along the camera's ray so the resting view reproduces the photo exactly. Colour and edge alpha are sampled per fragment straight from the photo and mask, so it is as sharp as the source. Quads spanning a real depth edge are dropped, so leaning reveals the table layer instead of stretched pixels. (The gaussian-splat renderer is still there for `.ply` / `.splat` captures.)
 6. **Window effect.** Off-axis (asymmetric frustum) projection from the head position: left/right, up/down and tilt. Distance is locked, so there's no zoom.
 7. **Head tracking.** MediaPipe Face Landmarker on every webcam frame. An adaptive One Euro filter smooths while you're still and opens up when you move, with a short damped prediction for camera latency and a ~40 ms critically damped spring.
 
-**Privacy-safe preview:** the camera feed is never shown. A small corner card draws a lamp-lit plaster mask from the tracker's 3D face mesh, framed like the camera's view. Hair comes from MediaPipe's on-device multiclass selfie segmenter: the real hair outline (any length or style) is filled with lit strands that flow from the crown and fall below the eyes, coloured from the average of the actual hair pixels. No video is displayed or uploaded.
+**Privacy-safe preview:** the camera feed is never shown. A small corner card draws a lamp-lit plaster mask from the tracker's 3D face mesh, framed like the camera's view, plus your distance from the screen.
+
+**Performance:** no live backdrop blur or animated blend-mode overlays (both cost a full-screen pass every frame), and the preview card redraws at most ~30 times a second.
 
 **Depth follows distance:** lean toward the screen and the scene's depth grows; sit back and it flattens (1.5x range). The framing never zooms.
 
