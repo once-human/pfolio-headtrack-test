@@ -698,7 +698,7 @@ function frame(now){
   if (frozen){ springX.x = tx = frozen.x; springY.x = ty = frozen.y; springR.x = tr = frozen.r || 0; springX.v = springY.v = springR.v = 0; }
   const omega = mode === "face" ? 26 : mode === "pointer" ? 9 : 2.5;
   springStep(springX, tx, dt, omega); springStep(springY, ty, dt, omega); springStep(springR, tr, dt, omega);
-  head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z; head.roll = springR.x;
+  head.x = springX.x; head.y = HEAD_Y0 + springY.x; head.z = EYE_Z; head.roll = -springR.x;   // tilt follows your head the other way round
 
   resize();
   gl.viewport(0, 0, canvas.width, canvas.height);
