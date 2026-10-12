@@ -65,10 +65,11 @@ button[aria-pressed="true"]{border-color:var(--flame);color:var(--flame)}
 .slider{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font:400 11px/1 var(--mono);color:var(--ink-dim);letter-spacing:.06em;text-transform:uppercase}
 .slider output{color:var(--ink);font-variant-numeric:tabular-nums;min-width:3.5ch;text-align:right}
 input[type=range]{width:100%;accent-color:var(--flame)}
-.cam{position:relative;width:168px;aspect-ratio:4/3;max-width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--glass-line);background:#000}
-.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-.cam video{filter:grayscale(1) contrast(1.1) brightness(.8)}
-.cam span{position:absolute;left:8px;bottom:6px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase}
+.cam{position:relative;width:208px;aspect-ratio:4/3;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--glass-line);background:#0d130f;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.cam canvas{position:absolute;inset:0;width:100%;height:100%}
+.cam video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}   /* feeds the tracker only; never shown */
+.cam span{position:absolute;left:10px;bottom:8px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.cam .camtop{top:8px;bottom:auto;color:rgba(239,232,223,.62);letter-spacing:.12em}
 
 #show{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));opacity:0;pointer-events:none;padding:8px 12px;font-size:11px;transition:opacity .3s}
 body.clean #show{opacity:.35;pointer-events:auto}
@@ -87,7 +88,7 @@ body.clean #show:hover{opacity:1}
   .bottom{flex-direction:column;align-items:stretch}
   .panel{align-items:stretch}
   .tools{width:100%}
-  .cam{width:120px}
+  .cam{width:150px}
   .lede{font-size:14px}
   .stats{gap:12px}
   .scrim{height:78vh}
@@ -125,7 +126,8 @@ body.clean #show:hover{opacity:1}
     <div class="panel">
       <div class="cam" id="cam" hidden>
         <video id="video" playsinline muted></video>
-        <canvas id="camcv" width="320" height="240"></canvas>
+        <canvas id="camcv" width="416" height="312" aria-label="A sculpted 3D model of your face, moving with you"></canvas>
+        <span class="camtop" title="Only your face's shape is drawn here, never the video. The camera feed stays on this device.">Shape only · no video</span>
         <span id="camlabel">Searching</span>
       </div>
       <div class="tools">
@@ -608,13 +610,14 @@ async function startTracking(){
     try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } }, audio: false }); }
     catch (e){ throw Object.assign(new Error(e.name || "camera"), { kind: e.name === "NotAllowedError" ? "denied" : "blocked" }); }
     const video = $("video"); video.srcObject = stream; await video.play();
-    $("cam").hidden = false; $("camlabel").textContent = "Loading face model";
+    $("cam").hidden = false; $("camlabel").textContent = "Loading face model"; drawFaceCard(null);
     btn.textContent = "Loading face model…";
     let vision;
     try { vision = await import(`${MP_BASE}/vision_bundle.mjs`); }
     catch (e){ throw Object.assign(new Error("import"), { kind: "net" }); }
     const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
     const opts = (delegate) => ({ baseOptions: { modelAssetPath: MP_MODEL, delegate }, runningMode: "VIDEO", numFaces: 1 });
+    try { TRIS = buildTris(vision.FaceLandmarker.FACE_LANDMARKS_TESSELATION || []); } catch (e){ TRIS = null; }
     try { tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("GPU")); }
     catch (e){ tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
     calib = null; setMode("face");
@@ -634,7 +637,7 @@ async function startTracking(){
 function stopTracking(){
   if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (tracker){ try { tracker.close(); } catch (e){} tracker = null; }
-  $("cam").hidden = true; face = null;
+  $("cam").hidden = true; face = null; lastLm = null;
   $("track").textContent = "Turn on head tracking";
   setMode(performance.now() - lastPointer < 6000 ? "pointer" : "auto");
 }
@@ -645,8 +648,7 @@ function pollTracker(now){
   lastVideoT = video.currentTime; lastDetect = now;
   let res; try { res = tracker.detectForVideo(video, now); } catch (e){ return; }
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
-  const cv = $("camcv"), g = cv.getContext("2d"); g.clearRect(0, 0, cv.width, cv.height);
-  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "No face"; return; }
+  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "No face"; drawFaceCard(null); return; }
   const vw = video.videoWidth, vh = video.videoHeight, fpx = (vw / 2) / Math.tan(HFOV / 2);
   const L = lm[468] || lm[33], R = lm[473] || lm[263];
   const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
@@ -661,12 +663,75 @@ function pollTracker(now){
   if (!calib) calib = { x: face.x, y: face.y, r: face.r, n: 1 };
   else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.n++; }
   $("camlabel").textContent = `Tracking · ${Math.round(dist * 100)} cm`;
-  const sx = cv.width / vw, sy = cv.height / vh;
-  g.fillStyle = "#f2a654"; g.strokeStyle = "rgba(242,166,84,.6)"; g.lineWidth = 1.5;
-  for (const p of [L, R]){ g.beginPath(); g.arc(p.x * vw * sx, p.y * vh * sy, 3, 0, Math.PI * 2); g.fill(); }
-  g.beginPath(); g.moveTo(lx * sx, ly * sy); g.lineTo(rx * sx, ry * sy); g.stroke();
-  g.fillStyle = "rgba(239,232,223,.5)";
-  for (let i = 0; i < lm.length; i += 9) g.fillRect(lm[i].x * cv.width - 0.75, lm[i].y * cv.height - 0.75, 1.5, 1.5);
+  drawFaceCard(lm, vw, vh);
+}
+
+/* ---- the privacy-safe preview: a plaster mask built from the tracker's 3D face mesh ----
+   The card is the camera's frame (mirrored, like a mirror), so the mask's position and size
+   show exactly how much the camera sees. Only landmark geometry is drawn; no video pixels. */
+let TRIS = null, lastLm = null, lastLmW = 640, lastLmH = 480;
+function buildTris(conns){
+  // the tessellation comes as edges; every 3-cycle in it is one triangle of the face mesh
+  const adj = new Map(), add = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); adj.get(a).add(b); };
+  for (const c of conns){ add(c.start, c.end); add(c.end, c.start); }
+  const out = [];
+  for (const [a, na] of adj) for (const b of na) if (b > a) for (const c of adj.get(b)) if (c > b && na.has(c)) out.push(a, b, c);
+  return out.length ? Uint16Array.from(out) : null;
+}
+function drawCardBackground(g, W, H){
+  const bgG = g.createRadialGradient(W * 0.3, -H * 0.15, 4, W * 0.45, H * 0.45, W * 0.95);
+  bgG.addColorStop(0, "rgb(92,78,42)"); bgG.addColorStop(0.35, "rgb(30,52,38)"); bgG.addColorStop(1, "rgb(10,17,13)");
+  g.fillStyle = bgG; g.fillRect(0, 0, W, H);
+  // the counter's tiles, faintly: green squares with warm grout
+  const step = W / 4.2; g.lineWidth = Math.max(1, W / 260); g.strokeStyle = "rgba(255,226,180,.09)";
+  g.beginPath();
+  for (let x = (W % step) / 2; x < W; x += step){ g.moveTo(x, 0); g.lineTo(x, H); }
+  for (let y = (H % step) / 2; y < H; y += step){ g.moveTo(0, y); g.lineTo(W, y); }
+  g.stroke();
+}
+function drawFaceCard(lm, vw, vh){
+  const cv = $("camcv"), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  drawCardBackground(g, W, H);
+  let dim = 1;
+  if (lm){ lastLm = lm; lastLmW = vw; lastLmH = vh; } else if (lastLm){ lm = lastLm; vw = lastLmW; vh = lastLmH; dim = 0.35; } else return;
+  const n = lm.length, P = new Float32Array(n * 3);
+  // fit the camera frame into the 4:3 card (cover), mirrored
+  const sc = Math.max(W / vw, H / vh), ox = (W - vw * sc) / 2, oy = (H - vh * sc) / 2;
+  for (let i = 0; i < n; i++){ P[i * 3] = W - (lm[i].x * vw * sc + ox); P[i * 3 + 1] = lm[i].y * vh * sc + oy; P[i * 3 + 2] = lm[i].z * vw * sc; }
+  // warm key light from the top-left (the counter lamp), a cool green bounce from below-right
+  const Lx = -0.42, Ly = -0.72, Lz = -0.55, ll = Math.hypot(Lx, Ly, Lz);
+  if (TRIS){
+    const nt = TRIS.length / 3, order = new Array(nt), depth = new Float32Array(nt);
+    for (let t = 0; t < nt; t++){ order[t] = t; depth[t] = P[TRIS[t * 3] * 3 + 2] + P[TRIS[t * 3 + 1] * 3 + 2] + P[TRIS[t * 3 + 2] * 3 + 2]; }
+    order.sort((a, b) => depth[b] - depth[a]);                       // far first (larger z = further from the camera)
+    g.lineJoin = "round"; g.lineWidth = 0.9;
+    for (const t of order){
+      const a = TRIS[t * 3] * 3, b = TRIS[t * 3 + 1] * 3, c = TRIS[t * 3 + 2] * 3;
+      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+      const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const nl = Math.hypot(nx, ny, nz) || 1;
+      nx /= nl; ny /= nl; nz /= nl; if (nz > 0){ nx = -nx; ny = -ny; nz = -nz; }      // face the viewer
+      const diff = Math.max(0, (nx * Lx + ny * Ly + nz * Lz) / ll);
+      const bounce = Math.max(0, nx * 0.5 + ny * 0.6 - nz * 0.2) * 0.35;
+      const rim = Math.pow(1 - Math.abs(nz), 3);
+      const k = (0.14 + 0.92 * diff) * dim;
+      const r = Math.min(255, 238 * k + 20 * bounce * dim + 40 * rim * dim);
+      const gg = Math.min(255, 214 * k + 70 * bounce * dim + 60 * rim * dim);
+      const bb = Math.min(255, 182 * k + 48 * bounce * dim + 44 * rim * dim);
+      const col = `rgb(${r | 0},${gg | 0},${bb | 0})`;
+      g.fillStyle = col; g.strokeStyle = col;
+      g.beginPath(); g.moveTo(P[a], P[a + 1]); g.lineTo(P[b], P[b + 1]); g.lineTo(P[c], P[c + 1]); g.closePath(); g.fill(); g.stroke();
+    }
+  } else {
+    g.fillStyle = `rgba(238,214,182,${0.8 * dim})`;
+    for (let i = 0; i < n; i++) g.fillRect(P[i * 3] - 1, P[i * 3 + 1] - 1, 2, 2);
+  }
+  // irises: dark glass with a lamp highlight
+  if (n > 473) for (const i of [468, 473]){
+    const x = P[i * 3], y = P[i * 3 + 1], r = Math.max(2, Math.hypot(P[(i + 1) * 3] - x, P[(i + 1) * 3 + 1] - y) * 0.95);
+    g.fillStyle = `rgba(28,22,16,${0.9 * dim})`; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = `rgba(242,166,84,${0.95 * dim})`; g.beginPath(); g.arc(x - r * 0.35, y - r * 0.35, Math.max(1, r * 0.3), 0, Math.PI * 2); g.fill();
+  }
 }
 
 /* =========================================================================
@@ -763,7 +828,8 @@ $("dist").addEventListener("input", (e) => { capture.dist = parseFloat(e.target.
 $("back").addEventListener("click", () => { capture = null; setScene(photoScene, "photo"); });
 
 // test hook: freeze the head at a given offset
-window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount };
+window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount,
+  faceTest: (lm, conns, vw, vh) => { TRIS = buildTris(conns); $("cam").hidden = false; drawFaceCard(lm, vw, vh); } };
 
 async function boot(){
   try {

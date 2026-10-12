@@ -16,6 +16,8 @@ Live: https://pfolio-headtrack-test.vercel.app
 6. **Window effect.** Off-axis (asymmetric frustum) projection from the head position: left/right, up/down and tilt. Distance is locked, so there's no zoom.
 7. **Head tracking.** MediaPipe Face Landmarker on every webcam frame. An adaptive One Euro filter smooths while you're still and opens up when you move, with a short damped prediction for camera latency and a ~40 ms critically damped spring.
 
+**Privacy-safe preview:** the camera feed is never shown. The corner card draws a lamp-lit plaster mask built only from the tracker's 3D face mesh (~900 triangles), framed like the camera's view, so you see what is tracked without any video.
+
 Renders at the screen's native resolution. Needs HTTPS (or localhost) for the camera.
 
 Controls: Parallax, Depth (height exaggeration) and Tilt sliders, Recenter, and `H` to hide the UI. Drag in a `.ply` / `.splat` capture to view a real gaussian-splat scan instead.
