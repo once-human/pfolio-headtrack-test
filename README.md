@@ -16,9 +16,9 @@ Live: https://pfolio-headtrack-test.vercel.app
 6. **Window effect.** Off-axis (asymmetric frustum) projection from the head position: left/right, up/down and tilt. Distance is locked, so there's no zoom.
 7. **Head tracking.** MediaPipe Face Landmarker on every webcam frame. An adaptive One Euro filter smooths while you're still and opens up when you move, with a short damped prediction for camera latency and a ~40 ms critically damped spring.
 
-**Privacy-safe preview:** the camera feed is never shown. The corner card renders a glazed green ceramic mask (WebGL, smooth per-vertex lighting, warm lamp highlight) built only from the tracker's 3D face mesh, framed like the camera's view, so you see what is tracked without any video.
+**Privacy-safe preview:** the camera feed is never shown. A small corner card draws a lamp-lit plaster mask from the tracker's 3D face mesh, framed like the camera's view. Hair comes from MediaPipe's on-device multiclass selfie segmenter: the real hair outline (any length or style) is filled with lit strands that flow from the crown and fall below the eyes, coloured from the average of the actual hair pixels. No video is displayed or uploaded.
 
-**Depth follows distance:** lean toward the screen and the scene's depth grows; sit back and it flattens. The framing never zooms.
+**Depth follows distance:** lean toward the screen and the scene's depth grows; sit back and it flattens (1.5x range). The framing never zooms.
 
 Renders at the screen's native resolution. Needs HTTPS (or localhost) for the camera.
 

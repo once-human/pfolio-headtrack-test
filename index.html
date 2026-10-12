@@ -65,7 +65,7 @@ button[aria-pressed="true"]{border-color:var(--flame);color:var(--flame)}
 .slider{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font:400 11px/1 var(--mono);color:var(--ink-dim);letter-spacing:.06em;text-transform:uppercase}
 .slider output{color:var(--ink);font-variant-numeric:tabular-nums;min-width:3.5ch;text-align:right}
 input[type=range]{width:100%;accent-color:var(--flame)}
-.cam{position:relative;width:208px;aspect-ratio:4/3;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid rgba(242,166,84,.16);background:radial-gradient(120% 95% at 28% 0%,#3a2a17 0%,#1a1410 48%,#0c0a08 100%);box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.cam{position:relative;width:104px;aspect-ratio:4/3;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--glass-line);background:#0d130f;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .cam canvas{position:absolute;inset:0;width:100%;height:100%}
 .cam video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}   /* feeds the tracker only; never shown */
 .cam span{position:absolute;left:10px;bottom:8px;font:500 9px/1 var(--mono);letter-spacing:.14em;color:var(--flame);text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.8)}
@@ -87,7 +87,7 @@ body.clean #show:hover{opacity:1}
   .bottom{flex-direction:column;align-items:stretch}
   .panel{align-items:stretch}
   .tools{width:100%}
-  .cam{width:150px}
+  .cam{width:90px}
   .lede{font-size:14px}
   .stats{gap:12px}
   .scrim{height:78vh}
@@ -125,8 +125,7 @@ body.clean #show:hover{opacity:1}
     <div class="panel">
       <div class="cam" id="cam" hidden>
         <video id="video" playsinline muted></video>
-        <canvas id="camcv" width="416" height="312" aria-label="A sculpted 3D model of your face, moving with you"></canvas>
-        <span id="camlabel"></span>
+        <canvas id="camcv" width="256" height="192" aria-label="A sculpted 3D model of your face, moving with you"></canvas>
       </div>
       <div class="tools">
         <h2>Window</h2>
@@ -608,7 +607,7 @@ async function startTracking(){
     try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } }, audio: false }); }
     catch (e){ throw Object.assign(new Error(e.name || "camera"), { kind: e.name === "NotAllowedError" ? "denied" : "blocked" }); }
     const video = $("video"); video.srcObject = stream; await video.play();
-    $("cam").hidden = false; $("camlabel").textContent = "Loading"; drawFaceCard(null);
+    $("cam").hidden = false; drawFaceCard(null);
     btn.textContent = "Loading face model…";
     let vision;
     try { vision = await import(`${MP_BASE}/vision_bundle.mjs`); }
@@ -620,7 +619,7 @@ async function startTracking(){
     catch (e){ tracker = await vision.FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
     calib = null; setMode("face");
     btn.disabled = false; btn.textContent = "Turn off head tracking";
-    $("camlabel").textContent = "";
+    startSegmenter(vision, fileset);                      // hair outline: optional, loads in the background
     toast("Head tracking is on. Sit about an arm's length away, lean around and tilt your head. Hit Recenter if the view feels off-centre.");
   } catch (e){
     stopTracking();
@@ -636,6 +635,7 @@ function stopTracking(){
   if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (tracker){ try { tracker.close(); } catch (e){} tracker = null; }
   $("cam").hidden = true; face = null; lastLm = null;
+  if (segmenter){ try { segmenter.close(); } catch (e){} segmenter = null; } hair.ready = false;
   $("track").textContent = "Turn on head tracking";
   setMode(performance.now() - lastPointer < 6000 ? "pointer" : "auto");
 }
@@ -646,7 +646,7 @@ function pollTracker(now){
   lastVideoT = video.currentTime; lastDetect = now;
   let res; try { res = tracker.detectForVideo(video, now); } catch (e){ return; }
   const lm = res && res.faceLandmarks && res.faceLandmarks[0];
-  if (!lm){ if (face) lostAt = now; face = null; $("camlabel").textContent = "Looking for you"; drawFaceCard(null); return; }
+  if (!lm){ if (face) lostAt = now; face = null; drawFaceCard(null); return; }
   const vw = video.videoWidth, vh = video.videoHeight, fpx = (vw / 2) / Math.tan(HFOV / 2);
   const L = lm[468] || lm[33], R = lm[473] || lm[263];
   const lx = L.x * vw, ly = L.y * vh, rx = R.x * vw, ry = R.y * vh;
@@ -660,7 +660,7 @@ function pollTracker(now){
   face.vx = fx1.dx; face.vy = fy1.dx; face.vr = fr1.dx;
   if (!calib) calib = { x: face.x, y: face.y, r: face.r, d: face.d, n: 1 };
   else if (calib.n < 20){ const k = 1 / (calib.n + 1); calib.x = mix(calib.x, face.x, k); calib.y = mix(calib.y, face.y, k); calib.r = mix(calib.r, face.r, k); calib.d = mix(calib.d, face.d, k); calib.n++; }
-  $("camlabel").textContent = `${Math.round(dist * 100)} cm`;
+  segmentHair(video, now);
   drawFaceCard(lm, vw, vh);
 }
 
@@ -677,69 +677,159 @@ function buildTris(conns){
   return out.length ? Uint16Array.from(out) : null;
 }
 // A small WebGL view of its own: smooth per-vertex lighting, depth-tested, transparent over the card.
-let faceGL = null;
-function initFaceGL(){
-  if (faceGL !== null) return faceGL;
-  const cv = $("camcv"), g2 = cv.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true, depth: true });
-  if (!g2){ faceGL = false; return false; }
-  const vs = `attribute vec3 p; attribute vec3 n; varying vec3 vn; varying vec3 vp;
-    void main(){ vn = n; vp = p; gl_Position = vec4(p.x, -p.y, p.z, 1.0); }`;
-  const fs = `precision mediump float; varying vec3 vn; varying vec3 vp;
-    uniform vec3 glaze; uniform float fade;
-    void main(){
-      vec3 N = normalize(vn); vec3 V = vec3(0.0, 0.0, -1.0);
-      vec3 L = normalize(vec3(-0.5, -0.75, -0.6));            // the counter lamp: top-left, in front
-      vec3 F = normalize(vec3(0.6, 0.7, -0.35));               // soft bounce off the tiles, from below-right
-      float diff = max(dot(N, L), 0.0), fill = max(dot(N, F), 0.0);
-      float spec = pow(max(dot(N, normalize(L + V)), 0.0), 56.0);
-      float sheen = pow(max(dot(N, normalize(L + V)), 0.0), 9.0);
-      float ndv = max(dot(N, V), 0.0);
-      vec3 col = glaze * (0.10 + 1.05 * diff) + glaze * vec3(0.55, 0.8, 0.6) * fill * 0.35;
-      col *= mix(0.45, 1.0, pow(ndv, 0.6));                     // edges fall into shadow: reads solid
-      col += vec3(1.0, 0.82, 0.58) * (spec * 0.95 + sheen * 0.08);   // warm glaze highlight
-      gl_FragColor = vec4(col * fade, fade);
-    }`;
-  const mk = (t, src) => { const sh_ = g2.createShader(t); g2.shaderSource(sh_, src); g2.compileShader(sh_); return sh_; };
-  const pr = g2.createProgram(); g2.attachShader(pr, mk(g2.VERTEX_SHADER, vs)); g2.attachShader(pr, mk(g2.FRAGMENT_SHADER, fs)); g2.linkProgram(pr);
-  if (!g2.getProgramParameter(pr, g2.LINK_STATUS)){ faceGL = false; return false; }
-  faceGL = { g: g2, pr, pb: g2.createBuffer(), nb: g2.createBuffer(), ib: g2.createBuffer(), ap: g2.getAttribLocation(pr, "p"), an: g2.getAttribLocation(pr, "n"),
-    uGlaze: g2.getUniformLocation(pr, "glaze"), uFade: g2.getUniformLocation(pr, "fade"), nIdx: 0, triRef: null };
-  return faceGL;
+function drawCardBackground(g, W, H){
+  const bgG = g.createRadialGradient(W * 0.3, -H * 0.15, 4, W * 0.45, H * 0.45, W * 0.95);
+  bgG.addColorStop(0, "rgb(92,78,42)"); bgG.addColorStop(0.35, "rgb(30,52,38)"); bgG.addColorStop(1, "rgb(10,17,13)");
+  g.fillStyle = bgG; g.fillRect(0, 0, W, H);
+  // the counter's tiles, faintly: green squares with warm grout
+  const step = W / 4.2; g.lineWidth = Math.max(1, W / 260); g.strokeStyle = "rgba(255,226,180,.09)";
+  g.beginPath();
+  for (let x = (W % step) / 2; x < W; x += step){ g.moveTo(x, 0); g.lineTo(x, H); }
+  for (let y = (H % step) / 2; y < H; y += step){ g.moveTo(0, y); g.lineTo(W, y); }
+  g.stroke();
 }
 function drawFaceCard(lm, vw, vh){
-  const F = initFaceGL(); if (!F || !TRIS) return;
-  const g2 = F.g, cv = $("camcv"), W = cv.width, H = cv.height;
-  let fade = 1;
-  if (lm){ lastLm = lm; lastLmW = vw; lastLmH = vh; } else if (lastLm){ lm = lastLm; vw = lastLmW; vh = lastLmH; fade = 0.3; }
-  g2.viewport(0, 0, W, H); g2.clearColor(0, 0, 0, 0); g2.clearDepth(1); g2.clear(g2.COLOR_BUFFER_BIT | g2.DEPTH_BUFFER_BIT);
-  if (!lm) return;
-  if (F.triRef !== TRIS){ g2.bindBuffer(g2.ELEMENT_ARRAY_BUFFER, F.ib); g2.bufferData(g2.ELEMENT_ARRAY_BUFFER, TRIS, g2.STATIC_DRAW); F.nIdx = TRIS.length; F.triRef = TRIS; }
-  const n = lm.length, P = new Float32Array(n * 3), N = new Float32Array(n * 3);
-  // camera frame fitted into the 4:3 card (cover) and mirrored, in clip space; y down, z toward the camera is negative
+  const cv = $("camcv"), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  drawCardBackground(g, W, H);
+  let dim = 1;
+  if (lm){ lastLm = lm; lastLmW = vw; lastLmH = vh; } else if (lastLm){ lm = lastLm; vw = lastLmW; vh = lastLmH; dim = 0.35; } else return;
+  const n = lm.length, P = new Float32Array(n * 3);
+  // fit the camera frame into the 4:3 card (cover), mirrored
   const sc = Math.max(W / vw, H / vh), ox = (W - vw * sc) / 2, oy = (H - vh * sc) / 2;
-  for (let i = 0; i < n; i++){
-    P[i * 3] = 1 - 2 * (lm[i].x * vw * sc + ox) / W;
-    P[i * 3 + 1] = 2 * (lm[i].y * vh * sc + oy) / H - 1;
-    P[i * 3 + 2] = lm[i].z * vw * sc / W * 2;
+  for (let i = 0; i < n; i++){ P[i * 3] = W - (lm[i].x * vw * sc + ox); P[i * 3 + 1] = lm[i].y * vh * sc + oy; P[i * 3 + 2] = lm[i].z * vw * sc; }
+  // warm key light from the top-left (the counter lamp), a cool green bounce from below-right
+  const Lx = -0.42, Ly = -0.72, Lz = -0.55, ll = Math.hypot(Lx, Ly, Lz);
+  if (TRIS){
+    const nt = TRIS.length / 3, order = new Array(nt), depth = new Float32Array(nt);
+    for (let t = 0; t < nt; t++){ order[t] = t; depth[t] = P[TRIS[t * 3] * 3 + 2] + P[TRIS[t * 3 + 1] * 3 + 2] + P[TRIS[t * 3 + 2] * 3 + 2]; }
+    order.sort((a, b) => depth[b] - depth[a]);                       // far first (larger z = further from the camera)
+    g.lineJoin = "round"; g.lineWidth = 0.9;
+    for (const t of order){
+      const a = TRIS[t * 3] * 3, b = TRIS[t * 3 + 1] * 3, c = TRIS[t * 3 + 2] * 3;
+      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+      const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const nl = Math.hypot(nx, ny, nz) || 1;
+      nx /= nl; ny /= nl; nz /= nl; if (nz > 0){ nx = -nx; ny = -ny; nz = -nz; }      // face the viewer
+      const diff = Math.max(0, (nx * Lx + ny * Ly + nz * Lz) / ll);
+      const bounce = Math.max(0, nx * 0.5 + ny * 0.6 - nz * 0.2) * 0.35;
+      const rim = Math.pow(1 - Math.abs(nz), 3);
+      const k = (0.14 + 0.92 * diff) * dim;
+      const r = Math.min(255, 238 * k + 20 * bounce * dim + 40 * rim * dim);
+      const gg = Math.min(255, 214 * k + 70 * bounce * dim + 60 * rim * dim);
+      const bb = Math.min(255, 182 * k + 48 * bounce * dim + 44 * rim * dim);
+      const col = `rgb(${r | 0},${gg | 0},${bb | 0})`;
+      g.fillStyle = col; g.strokeStyle = col;
+      g.beginPath(); g.moveTo(P[a], P[a + 1]); g.lineTo(P[b], P[b + 1]); g.lineTo(P[c], P[c + 1]); g.closePath(); g.fill(); g.stroke();
+    }
+  } else {
+    g.fillStyle = `rgba(238,214,182,${0.8 * dim})`;
+    for (let i = 0; i < n; i++) g.fillRect(P[i * 3] - 1, P[i * 3 + 1] - 1, 2, 2);
   }
-  // smooth normals: area-weighted face normals, each turned toward the viewer, summed per vertex
-  const ax = W / 2, ay = H / 2;                               // undo the clip-space squash so normals are true
-  for (let t = 0; t < TRIS.length; t += 3){
-    const a = TRIS[t] * 3, b = TRIS[t + 1] * 3, c = TRIS[t + 2] * 3;
-    const ux = (P[b] - P[a]) * ax, uy = (P[b + 1] - P[a + 1]) * ay, uz = (P[b + 2] - P[a + 2]) * ax;
-    const vx = (P[c] - P[a]) * ax, vy = (P[c + 1] - P[a + 1]) * ay, vz = (P[c + 2] - P[a + 2]) * ax;
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    if (nz > 0){ nx = -nx; ny = -ny; nz = -nz; }
-    for (const k of [a, b, c]){ N[k] += nx; N[k + 1] += ny; N[k + 2] += nz; }
+  if (hair.ready) drawHair(g, W, H, P, sc, ox, oy, vw, vh, dim);
+  // irises: dark glass with a lamp highlight
+  if (n > 473) for (const i of [468, 473]){
+    const x = P[i * 3], y = P[i * 3 + 1], r = Math.max(2, Math.hypot(P[(i + 1) * 3] - x, P[(i + 1) * 3 + 1] - y) * 0.95);
+    g.fillStyle = `rgba(28,22,16,${0.9 * dim})`; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = `rgba(242,166,84,${0.95 * dim})`; g.beginPath(); g.arc(x - r * 0.35, y - r * 0.35, Math.max(1, r * 0.3), 0, Math.PI * 2); g.fill();
   }
-  g2.useProgram(F.pr);
-  g2.bindBuffer(g2.ARRAY_BUFFER, F.pb); g2.bufferData(g2.ARRAY_BUFFER, P, g2.DYNAMIC_DRAW); g2.enableVertexAttribArray(F.ap); g2.vertexAttribPointer(F.ap, 3, g2.FLOAT, false, 0, 0);
-  g2.bindBuffer(g2.ARRAY_BUFFER, F.nb); g2.bufferData(g2.ARRAY_BUFFER, N, g2.DYNAMIC_DRAW); g2.enableVertexAttribArray(F.an); g2.vertexAttribPointer(F.an, 3, g2.FLOAT, false, 0, 0);
-  g2.bindBuffer(g2.ELEMENT_ARRAY_BUFFER, F.ib);
-  g2.enable(g2.DEPTH_TEST); g2.depthFunc(g2.LESS);
-  g2.uniform3f(F.uGlaze, 0.17, 0.44, 0.31);                  // the tiles' green glaze
-  g2.uniform1f(F.uFade, fade);
-  g2.drawElements(g2.TRIANGLES, F.nIdx, g2.UNSIGNED_SHORT, 0);
+}
+
+
+/* ---- hair: the real outline from an on-device hair segmentation, drawn as lit strands ----
+   MediaPipe's multiclass selfie segmenter labels hair pixels. That outline (never the video)
+   decides where hair is; strands are generated on a grid that moves with your head so the
+   texture doesn't swim, flow outward from the face and fall with gravity below the eyes,
+   and take their colour from the average of your actual hair pixels. */
+const SEG_MODEL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
+let segmenter = null, segTick = 0;
+const hair = { ready: false, mw: 0, mh: 0, mask: document.createElement("canvas"), layer: document.createElement("canvas"), sample: document.createElement("canvas"),
+  col: [62, 44, 32], seeds: null };
+(function makeSeeds(){
+  const r = mulberry32(77), out = [];
+  for (let i = 0; i < 1400; i++) out.push({ u: (r() * 2 - 1) * 4.2, v: (r() * 2 - 1) * 4.6, len: 0.55 + r() * 0.9, bend: (r() - 0.5) * 0.9, tone: 0.55 + r() * 0.75, w: 0.5 + r() * 0.7 });
+  hair.seeds = out;
+})();
+async function startSegmenter(vision, fileset){
+  const opts = (delegate) => ({ baseOptions: { modelAssetPath: SEG_MODEL, delegate }, runningMode: "VIDEO", outputCategoryMask: true, outputConfidenceMasks: false });
+  try { segmenter = await vision.ImageSegmenter.createFromOptions(fileset, opts("GPU")); }
+  catch (e){ try { segmenter = await vision.ImageSegmenter.createFromOptions(fileset, opts("CPU")); } catch (e2){ segmenter = null; } }
+}
+function segmentHair(video, now){
+  if (!segmenter || (segTick++ & 1)) return;                 // every other camera frame is plenty for hair
+  let res; try { res = segmenter.segmentForVideo(video, now); } catch (e){ return; }
+  const m = res && res.categoryMask;
+  if (m){
+    const mw = m.width, mh = m.height, cat = m.getAsUint8Array();
+    const SW = 160, SH = Math.round(160 * mh / mw);
+    if (hair.mask.width !== SW || hair.mask.height !== SH){ hair.mask.width = SW; hair.mask.height = SH; }
+    const mg = hair.mask.getContext("2d"), id = mg.createImageData(SW, SH), d = id.data;
+    let any = 0;
+    for (let y = 0; y < SH; y++){
+      const sy = Math.min(mh - 1, Math.round((y + 0.5) * mh / SH - 0.5));
+      for (let x = 0; x < SW; x++){
+        const sx = Math.min(mw - 1, Math.round((x + 0.5) * mw / SW - 0.5));
+        const h = cat[sy * mw + sx] === 1 ? 255 : 0, o = (y * SW + x) * 4;
+        d[o] = d[o + 1] = d[o + 2] = 255; d[o + 3] = h; any += h;
+      }
+    }
+    mg.putImageData(id, 0, 0);
+    hair.mw = SW; hair.mh = SH; hair.ready = any > 0;
+    // hair colour: average of the real hair pixels (read from a tiny offscreen copy, never displayed)
+    if (hair.ready && (segTick & 7) === 0){
+      const sc = hair.sample, CW = 48, CH = Math.round(48 * mh / mw); sc.width = CW; sc.height = CH;
+      const cg = sc.getContext("2d", { willReadFrequently: true }); cg.drawImage(video, 0, 0, CW, CH);
+      const px = cg.getImageData(0, 0, CW, CH).data; let r = 0, g = 0, b = 0, n = 0;
+      for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++){
+        const sy = Math.min(mh - 1, Math.floor((y + 0.5) * mh / CH)), sx = Math.min(mw - 1, Math.floor((x + 0.5) * mw / CW));
+        if (cat[sy * mw + sx] !== 1) continue; const o = (y * CW + x) * 4; r += px[o]; g += px[o + 1]; b += px[o + 2]; n++;
+      }
+      if (n > 6){ const k = 0.25; hair.col = [mix(hair.col[0], r / n, k), mix(hair.col[1], g / n, k), mix(hair.col[2], b / n, k)]; }
+    }
+  }
+  try { if (m && m.close) m.close(); if (res && res.close) res.close(); } catch (e){}
+}
+function drawHair(g, W, H, P, sc, ox, oy, vw, vh, dim){
+  const L = hair.layer; if (L.width !== W || L.height !== H){ L.width = W; L.height = H; }
+  const hg = L.getContext("2d");
+  hg.setTransform(1, 0, 0, 1, 0, 0); hg.globalCompositeOperation = "source-over"; hg.clearRect(0, 0, W, H);
+  // head frame from the eyes: centre, scale (eye distance) and roll, so strands ride along with you
+  const ex = (P[468 * 3] + P[473 * 3]) / 2, ey = (P[468 * 3 + 1] + P[473 * 3 + 1]) / 2;
+  const ix = P[473 * 3] - P[468 * 3], iy = P[473 * 3 + 1] - P[468 * 3 + 1], ipd = Math.max(4, Math.hypot(ix, iy));
+  const ca = ix / ipd, sa = iy / ipd;
+  // base colour, a touch warmer under the lamp
+  const c = hair.col, base = [c[0] * 0.55 + 10, c[1] * 0.5 + 6, c[2] * 0.45 + 3];
+  hg.fillStyle = `rgb(${base[0] | 0},${base[1] | 0},${base[2] | 0})`; hg.fillRect(0, 0, W, H);
+  // strands
+  hg.lineCap = "round";
+  const unit = ipd * 0.62;
+  for (const s of hair.seeds){
+    const x0 = ex + (s.u * ca - s.v * sa) * unit, y0 = ey + (s.u * sa + s.v * ca) * unit;
+    if (x0 < -10 || y0 < -10 || x0 > W + 10 || y0 > H + 10) continue;
+    // hair falls away from the crown (above the forehead), not from the eyes
+    const cx_ = ex + sa * ipd * 1.7, cy_ = ey - ca * ipd * 1.7;
+    let dx = x0 - cx_, dy = y0 - cy_; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+    dy = dy * 0.8 + 0.2; { const q = Math.hypot(dx, dy) || 1; dx /= q; dy /= q; }
+    const below = Math.max(0, (s.u * sa + s.v * ca) * unit) / (ipd * 1.2);       // below the eye line: hair falls
+    const gk = Math.min(1, below * 0.9); dx = dx * (1 - gk); dy = dy * (1 - gk) + gk;
+    const len = s.len * unit * (1 + gk * 1.6), nx = -dy, ny = dx;
+    const x1 = x0 + dx * len, y1 = y0 + dy * len, mx = (x0 + x1) / 2 + nx * s.bend * len * 0.35, my = (y0 + y1) / 2 + ny * s.bend * len * 0.35;
+    const lit = Math.max(0, (-dx * 0.45 - dy * 0.7) * 0.5 + 0.5);                  // strands facing the lamp catch light
+    const k = s.tone * (0.75 + 0.7 * lit);
+    hg.strokeStyle = `rgba(${Math.min(255, c[0] * k + 18 * lit) | 0},${Math.min(255, c[1] * k + 12 * lit) | 0},${Math.min(255, c[2] * k + 6 * lit) | 0},0.85)`;
+    hg.lineWidth = s.w * Math.max(0.8, W / 260);
+    hg.beginPath(); hg.moveTo(x0, y0); hg.quadraticCurveTo(mx, my, x1, y1); hg.stroke();
+  }
+  // a soft sheen band where the lamp hits the crown
+  const sh = hg.createRadialGradient(ex - ipd * 0.9, ey - ipd * 2.0, 1, ex - ipd * 0.6, ey - ipd * 1.6, ipd * 2.2);
+  sh.addColorStop(0, "rgba(255,214,160,.22)"); sh.addColorStop(1, "rgba(255,214,160,0)");
+  hg.fillStyle = sh; hg.fillRect(0, 0, W, H);
+  // keep only where the camera actually saw hair (mirrored + cover-fitted like the face), soft edge
+  hg.globalCompositeOperation = "destination-in";
+  hg.filter = `blur(${Math.max(0.6, W / 300)}px)`;
+  hg.setTransform(-sc * vw / hair.mw, 0, 0, sc * vh / hair.mh, W - ox, oy);
+  hg.drawImage(hair.mask, 0, 0);
+  hg.filter = "none"; hg.setTransform(1, 0, 0, 1, 0, 0); hg.globalCompositeOperation = "source-over";
+  g.globalAlpha = dim; g.drawImage(L, 0, 0); g.globalAlpha = 1;
 }
 
 /* =========================================================================
@@ -796,7 +886,7 @@ function frame(now){
     gl.uniform1i(U.u_tex, 0);
     gl.uniform1f(U.u_time, reduceMotion ? 0 : t);
     const photo = sceneKind === "photo";
-    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain * Math.pow(springD.x, 1.4) : 1); gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
+    gl.uniform1f(U.u_base, photo ? -ZT : 0); gl.uniform1f(U.u_depth, photo ? depthGain * Math.max(0.2, 1 + (Math.pow(springD.x, 1.4) - 1) * 1.5) : 1);   // 1.5x the closeness range gl.uniform1f(U.u_opac, photo ? 1.7 : 1);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCount);
   }
   requestAnimationFrame(frame);
@@ -841,7 +931,12 @@ $("back").addEventListener("click", () => { capture = null; setScene(photoScene,
 
 // test hook: freeze the head at a given offset
 window.__window = { freeze: (x, y, r) => { frozen = { x, y, r }; }, release: () => { frozen = null; }, count: () => drawCount,
-  faceTest: (lm, conns, vw, vh) => { TRIS = buildTris(conns); $("cam").hidden = false; drawFaceCard(lm, vw, vh); } };
+  faceTest: (lm, conns, vw, vh, hairFn) => {
+    TRIS = buildTris(conns); $("cam").hidden = false;
+    if (hairFn){ const SW = 160, SH = 120; hair.mask.width = SW; hair.mask.height = SH; const mg = hair.mask.getContext("2d"), id = mg.createImageData(SW, SH);
+      for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++){ const o = (y * SW + x) * 4; id.data[o] = id.data[o + 1] = id.data[o + 2] = 255; id.data[o + 3] = hairFn(x / SW, y / SH) ? 255 : 0; }
+      mg.putImageData(id, 0, 0); hair.mw = SW; hair.mh = SH; hair.ready = true; }
+    drawFaceCard(lm, vw, vh); } };
 
 async function boot(){
   try {
